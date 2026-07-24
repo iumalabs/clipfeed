@@ -179,3 +179,15 @@
 # IMAGES_ENABLED defaults to "true"; only the literal "false" disables the
 # whole feature.
 # IMAGES_ENABLED=true
+
+# robots.txt compliance (see README "robots.txt & bot transparency",
+# packages/api/src/pipeline/robots.ts): gates every server-side
+# article/image fetch on the target host's own robots.txt (KV-cached 24h).
+# ROBOTS_RESPECT defaults to "true"; only the literal "false" disables it.
+# ROBOTS_RESPECT=true
+
+# Contact address for the public GET /bot transparency page's removal-
+# request section — omitted from the page entirely when unset. [vars]
+# default "" (per the forkability policy); never set this to a real
+# personal address in this repo's own committed wrangler.toml.
+# CONTACT_EMAIL=

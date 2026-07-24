@@ -364,6 +364,21 @@ declare global {
     // the binding IS configured — set to "false" to opt out entirely.
     IMAGES?: R2Bucket;
     IMAGES_ENABLED?: string;
+    // robots.txt compliance (Task 48, README "robots.txt & bot
+    // transparency", see pipeline/robots.ts): gates every server-side
+    // article/image fetch (agent candidates dropped before ranking, manual/
+    // Telegram URL adds rejected with a 409 unless overridden) on the
+    // target host's own robots.txt, cached in KV for 24h. Never affects the
+    // browser-extension path, which supplies pre-extracted HTML and never
+    // triggers a fetch at all. ROBOTS_RESPECT default "true" — only the
+    // literal "false" disables the whole feature, same convention as
+    // FAITHFULNESS_CHECK/IMAGES_ENABLED above.
+    ROBOTS_RESPECT?: string;
+    // Contact address shown on the public GET /bot transparency page for
+    // takedown/removal requests — omitted from the page entirely when
+    // unset. [vars] default "" (per the forkability policy, never an
+    // owner-specific default, same as REPO_URL above).
+    CONTACT_EMAIL?: string;
   }
 }
 

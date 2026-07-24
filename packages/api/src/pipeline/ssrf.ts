@@ -220,3 +220,25 @@ export async function safeFetchImageBytes(targetUrl: string): Promise<SafeImageF
   const bytes = await readCappedBytes(response, IMAGE_MAX_BYTES);
   return { bytes, contentType };
 }
+
+// Task 48: same SSRF guarantees (private-host rejection, re-validated
+// redirects, timeout) as the other safeFetch* helpers, but tolerant of a
+// non-2xx/unreachable robots.txt in a way those aren't — a 404 (no
+// robots.txt) or any other failure here means "couldn't determine a rule,"
+// not "something went wrong," so this returns null instead of throwing.
+// robots.ts's checkRobots treats that null the same as an explicit
+// allow-everything file (the standard lenient default).
+const ROBOTS_FETCH_TIMEOUT_MS = 8_000;
+const ROBOTS_MAX_BYTES = 500 * 1024;
+
+export async function fetchRobotsTxt(host: string): Promise<string | null> {
+  try {
+    const response = await fetchGuardedResponse(
+      `https://${host}/robots.txt`,
+      ROBOTS_FETCH_TIMEOUT_MS,
+    );
+    return await readCapped(response, ROBOTS_MAX_BYTES);
+  } catch {
+    return null;
+  }
+}
