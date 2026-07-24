@@ -378,6 +378,17 @@
           }
         }
       },
+      "RobotsBlockedResponse": {
+        "type": "object",
+        "required": ["error", "host"],
+        "properties": {
+          "error": { "type": "string", "enum": ["robots_disallowed"] },
+          "host": {
+            "type": "string",
+            "description": "The article URL's hostname whose robots.txt disallowed the fetch."
+          }
+        }
+      },
       "PatchArticleRequest": {
         "type": "object",
         "properties": {
@@ -927,6 +938,20 @@
         }
       }
     },
+    "/bot": {
+      "get": {
+        "tags": ["public"],
+        "summary": "Bot transparency page",
+        "description": "Task 48 Part 2: a small static HTML page for any webmaster/crawler-operator who notices this fetcher's requests in their own logs — what ClipFeed is, that it publishes attributed summaries with a link to the original (never full article text), roughly how many articles it adds per day, whether this instance currently honors robots.txt, and how to request a removal.",
+        "operationId": "getBotPage",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "text/html": { "schema": { "type": "string" } } }
+          }
+        }
+      }
+    },
     "/api/telegram/webhook": {
       "post": {
         "tags": ["integrations"],
@@ -1016,9 +1041,17 @@
       "post": {
         "tags": ["admin"],
         "summary": "Save an article",
-        "description": "Used by the browser extension, manual SPA add, and (indirectly, same validation) the Telegram save flow. Never blocked by the curation blocklist (owner intent overrides it) — a blocked domain just gets an advisory `warning` in the response.",
+        "description": "Used by the browser extension, manual SPA add, and (indirectly, same validation) the Telegram save flow. Never blocked by the curation blocklist (owner intent overrides it) — a blocked domain just gets an advisory `warning` in the response. Task 48: when no `html` is supplied (a server-side fetch will actually happen), the target host's robots.txt is checked first — a disallowed host 409s unless `?force=1` is passed. Skipped entirely when `html` is supplied (the extension path never triggers a fetch either way).",
         "operationId": "createArticle",
         "security": [{ "cloudflareAccess": [] }],
+        "parameters": [
+          {
+            "name": "force",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["1"] },
+            "description": "Skips the robots.txt check."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1038,10 +1071,15 @@
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
           "409": {
-            "description": "This exact URL, or a normalized-title match against a different URL added in the last 72h, already exists.",
+            "description": "This exact URL, or a normalized-title match against a different URL added in the last 72h, already exists — OR the target host's robots.txt disallows the fetch (see the `force` parameter above).",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/DuplicateArticleResponse" }
+                "schema": {
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/DuplicateArticleResponse" },
+                    { "$ref": "#/components/schemas/RobotsBlockedResponse" }
+                  ]
+                }
               }
             }
           },
@@ -1103,6 +1141,26 @@
         "responses": {
           "204": { "description": "Deleted." },
           "404": { "$ref": "#/components/responses/NotFound" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/articles/{id}/image": {
+      "delete": {
+        "tags": ["admin"],
+        "summary": "Remove just an article's stored image",
+        "description": "Task 48 Part 3: purges the R2 object and clears image_key/image_source_url/image_width/image_height, without touching the rest of the article — a lighter-weight removal path than deleting the whole article, e.g. for a takedown or licensing request.",
+        "operationId": "deleteArticleImage",
+        "security": [{ "cloudflareAccess": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ArticleId" }],
+        "responses": {
+          "204": { "description": "Deleted." },
+          "404": {
+            "description": "The article doesn't exist, or has no image to remove.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } }
+            }
+          },
           "401": { "$ref": "#/components/responses/Unauthorized" }
         }
       }

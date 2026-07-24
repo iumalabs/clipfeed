@@ -13,11 +13,18 @@ function truncateToTelegramLimit(text: string): string {
 export const NON_OWNER_REPLY = "Это персональный бот.";
 
 export const HELP_TEXT =
-  "Отправь ссылку — сохраню её в ленту.\n\n/digest — прислать выжимку за сутки.\n/scrape — запустить агента прямо сейчас (если уже запускался сегодня, предупрежу перед повтором; /scrape force — без предупреждения).\n/publish — опубликовать следующую статью из очереди сейчас же.";
+  "Отправь ссылку — сохраню её в ленту (если сайт блокирует ботов через robots.txt, допиши «force» после ссылки, чтобы сохранить всё равно).\n\n/digest — прислать выжимку за сутки.\n/scrape — запустить агента прямо сейчас (если уже запускался сегодня, предупрежу перед повтором; /scrape force — без предупреждения).\n/publish — опубликовать следующую статью из очереди сейчас же.";
 
 export const SAVING_TEXT = "Сохраняю…";
 
 export const ALREADY_SAVED_TEXT = "Уже сохранено";
+
+// Task 48: shown when a Telegram-submitted URL's robots.txt disallows a
+// generic bot fetch — the owner can resend the same link with "force"
+// appended (same override wording style as "/scrape force") to save it
+// anyway.
+export const ROBOTS_BLOCKED_TEXT =
+  "Сайт запрещает автоматический доступ (robots.txt). Чтобы сохранить всё равно, отправь ссылку ещё раз со словом «force» в конце.";
 
 export const NO_DIGEST_ARTICLES_TEXT = "За последние сутки новых статей нет.";
 

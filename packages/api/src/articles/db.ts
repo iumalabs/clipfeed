@@ -408,6 +408,17 @@ export async function markImageStored(
   ).bind(imageKey, imageSourceUrl, imageWidth, imageHeight, id).run();
 }
 
+// Task 48 Part 3: fast image-only removal (see index.ts's
+// DELETE /api/admin/articles/:id/image) — clears the DB side of an
+// article's stored image without touching anything else, so a removal
+// request can be honored without discarding the summary or waiting on a
+// deploy. Caller is responsible for deleting the R2 object itself first.
+export async function clearArticleImage(db: D1Database, id: string): Promise<void> {
+  await db.prepare(
+    "UPDATE articles SET image_key = ?, image_source_url = ?, image_width = ?, image_height = ? WHERE id = ?",
+  ).bind(null, null, null, null, id).run();
+}
+
 export interface UnembeddedArticle {
   id: string;
   title_ru: string | null;
