@@ -237,6 +237,62 @@ Deno.test("buildCandidatePool: the static denylist and the learned list both app
   assertEquals(pool.map((c) => c.id), ["real"]);
 });
 
+// --- Task 48 §1.3: robots.txt filter, BEFORE ranking/dedup — the 7th
+// positional arg defaults to false (see buildCandidatePool's own comment),
+// so these tests pass `true` explicitly and pre-seed the KV cache to avoid
+// any real network fetch. ---
+
+Deno.test("buildCandidatePool: drops a candidate whose host disallows a generic fetch, when robots respect is enabled", async () => {
+  const db = new FakeD1();
+  const kv = new FakeKv();
+  await kv.put("robots:blocked.example", "User-agent: *\nDisallow: /");
+
+  const blocked = makeCandidate({ id: "blocked", url: "https://blocked.example/article" });
+  const allowed = makeCandidate({ id: "allowed", url: "https://arstechnica.com/article" });
+
+  const { pool, robotsDropped } = await buildCandidatePool(
+    db,
+    kv,
+    [blocked, allowed],
+    NOW,
+    undefined,
+    undefined,
+    true,
+  );
+  assertEquals(pool.map((c) => c.id), ["allowed"]);
+  assertEquals(robotsDropped, 1);
+});
+
+Deno.test("buildCandidatePool: robots.txt is never even consulted when respect is disabled (the default)", async () => {
+  const db = new FakeD1();
+  const kv = new FakeKv();
+  await kv.put("robots:blocked.example", "User-agent: *\nDisallow: /");
+
+  const wouldBeBlocked = makeCandidate({ id: "kept", url: "https://blocked.example/article" });
+  const { pool, robotsDropped } = await buildCandidatePool(db, kv, [wouldBeBlocked], NOW);
+  assertEquals(pool.map((c) => c.id), ["kept"]);
+  assertEquals(robotsDropped, 0);
+});
+
+Deno.test("buildCandidatePool: a candidate allowed by robots.txt survives to the later dedup stages", async () => {
+  const db = new FakeD1();
+  const kv = new FakeKv();
+  await kv.put("robots:ok.example", "User-agent: *\nAllow: /");
+
+  const candidate = makeCandidate({ id: "ok", url: "https://ok.example/article" });
+  const { pool, robotsDropped } = await buildCandidatePool(
+    db,
+    kv,
+    [candidate],
+    NOW,
+    undefined,
+    undefined,
+    true,
+  );
+  assertEquals(pool.map((c) => c.id), ["ok"]);
+  assertEquals(robotsDropped, 0);
+});
+
 // --- Task 24 Part B: pre-scrape title-based dedup (normalized-exact +
 // Jaccard), against both the 72h DB window and other pool candidates ---
 

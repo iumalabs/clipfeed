@@ -112,6 +112,7 @@ export interface Dictionary {
   logoHomeAria: string;
   footerLicenseLabel: string;
   footerContentNotice: string;
+  footerBotLinkLabel: string;
   backToFeedLink: string;
   resetFiltersAction: string;
   preparingEnglishLabel: string;
@@ -231,6 +232,7 @@ const ru: Dictionary = {
   logoHomeAria: "На главную",
   footerLicenseLabel: "код под MIT",
   footerContentNotice: "Выжимки созданы ИИ. Права на исходные статьи принадлежат их авторам.",
+  footerBotLinkLabel: "про бота",
   backToFeedLink: "показать всю ленту",
   resetFiltersAction: "Сбросить фильтры",
   preparingEnglishLabel: "Готовим английскую версию…",
@@ -352,6 +354,7 @@ const en: Dictionary = {
   footerLicenseLabel: "code under MIT",
   footerContentNotice:
     "Summaries are AI-generated. Rights to the source articles belong to their authors.",
+  footerBotLinkLabel: "about this bot",
   backToFeedLink: "back to feed",
   resetFiltersAction: "Reset filters",
   preparingEnglishLabel: "Preparing English version…",

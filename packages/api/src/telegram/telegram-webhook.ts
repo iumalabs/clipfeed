@@ -24,6 +24,7 @@ import {
   PUBLISH_SKIPPED_TEXT,
   PUBLISH_SUCCESS_TEXT,
   publishCapReachedText,
+  ROBOTS_BLOCKED_TEXT,
   SAVING_TEXT,
 } from "./telegram-strings.ts";
 import { timingSafeEqualStrings } from "./telegram-secret.ts";
@@ -37,6 +38,7 @@ import { sourceFromUrl } from "../articles/validation.ts";
 import { runAgentJob } from "../agent/agent.ts";
 import { formatUtcHourMinute, readAgentRunHistory } from "../agent/agent-run-tracker.ts";
 import { publishNextArticle } from "./telegram-publish.ts";
+import { isRobotsRespectEnabled, robotsAllowsUrl } from "../pipeline/robots.ts";
 
 const SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token";
 const DIGEST_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -79,7 +81,24 @@ async function handleUrlMessage(
   c: Context<AppEnv>,
   config: TelegramConfig,
   url: string,
+  force: boolean,
 ): Promise<Response> {
+  // Task 48 §1.3: checked BEFORE "Сохраняю…" is even sent — a disallowed
+  // URL gets ROBOTS_BLOCKED_TEXT directly instead of a placeholder that
+  // would need editing afterward. "force" (see handleOwnerMessage below)
+  // skips this entirely, same explicit-override semantics as "/scrape force".
+  if (!force) {
+    const robots = await robotsAllowsUrl(
+      c.env.CACHE,
+      isRobotsRespectEnabled(c.env.ROBOTS_RESPECT),
+      url,
+    );
+    if (!robots.allowed) {
+      await sendMessage(config.botToken, config.ownerChatId, ROBOTS_BLOCKED_TEXT).catch(() => {});
+      return c.json({ ok: true });
+    }
+  }
+
   const sent = await sendMessage(config.botToken, config.ownerChatId, SAVING_TEXT).catch(() =>
     null
   );
@@ -188,7 +207,10 @@ async function handleOwnerMessage(
     return c.json({ ok: true });
   }
 
-  return await handleUrlMessage(c, config, url);
+  // Task 48 §1.3: "<url> force" bypasses the robots.txt check — same
+  // trailing-word override convention as "/scrape force" above.
+  const forced = /(^|\s)force$/i.test(text);
+  return await handleUrlMessage(c, config, url, forced);
 }
 
 // Telegram delivers updates via webhook and can't present a Cloudflare

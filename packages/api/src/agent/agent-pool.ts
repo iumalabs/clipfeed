@@ -17,6 +17,7 @@ import {
 } from "../search/embeddings.ts";
 import { resolveDomainPrecedence } from "./domain-block.ts";
 import { hostname } from "../lib/url-host.ts";
+import { honorCrawlDelay, robotsAllowsUrl } from "../pipeline/robots.ts";
 
 const POOL_CAP = 160;
 const WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -183,6 +184,7 @@ export interface BuildCandidatePoolResult {
   pool: Candidate[];
   dedupDrops: PoolDedupDrop[];
   blockedDropped: number;
+  robotsDropped: number;
 }
 
 // Task 33 §2/§5 — absolute domain block, checked BEFORE ranking (zero LLM
@@ -328,10 +330,13 @@ async function applySemanticDedup(
 // auto-learned blocks, zero LLM spend — a distinct policy layer from the
 // thin-host filter below, which exists for extraction-quality reasons, not
 // curation taste) -> paywall-title-marker filter -> thin-host filter ->
-// newest-first sort -> pool-internal dedupe by canonicalized URL -> drop
-// candidates already saved (exact url match against D1) -> normalized-title
-// exact match -> title Jaccard similarity -> semantic (optional, Task 27)
-// -> cap. Layers 2 and 3 (title/Jaccard) are checked
+// robots.txt filter (Task 48 §1.3: also zero LLM spend — a candidate whose
+// host disallows a generic bot fetch is dropped here, before ranking, and
+// any Crawl-delay an allowed host declares is honored inline; see
+// robots.ts) -> newest-first sort -> pool-internal dedupe by canonicalized
+// URL -> drop candidates already saved (exact url match against D1) ->
+// normalized-title exact match -> title Jaccard similarity -> semantic
+// (optional, Task 27) -> cap. Layers 2 and 3 (title/Jaccard) are checked
 // against BOTH the 72h DB window and every pool candidate already kept in
 // this same pass — the DB check runs first per candidate (a match there
 // always means "drop the newer candidate", since the existing row was
@@ -356,6 +361,12 @@ export async function buildCandidatePool(
   now: Date = new Date(),
   semantic?: SemanticDedupConfig,
   block?: BlockConfig,
+  // Defaults to false (not ROBOTS_RESPECT's own "true" default) so existing
+  // callers that don't pass this — including every pre-Task-48 test in
+  // agent-pool_test.ts — keep behaving exactly as before, with no surprise
+  // network calls to a candidate's host. The real call site (agent.ts)
+  // explicitly passes isRobotsRespectEnabled(env.ROBOTS_RESPECT).
+  robotsRespectEnabled = false,
 ): Promise<BuildCandidatePoolResult> {
   const fresh = candidates.filter((c) => isWithinWindow(c, now));
 
@@ -390,13 +401,35 @@ export async function buildCandidatePool(
     }
     return true;
   });
-  substantial.sort((a, b) => publishedAtMs(b) - publishedAtMs(a));
+
+  // Task 48 §1.3: robots.txt gate, BEFORE ranking — dropped here means zero
+  // LLM spend on a candidate the target host disallows fetching. Checked
+  // concurrently (each host's robots.txt is KV-cached, see robots.ts), but
+  // any Crawl-delay an ALLOWED host declares is honored sequentially right
+  // here, same "simple await, no per-host scheduler" reasoning as the
+  // fetch-time equivalent would need.
+  const robotsChecks = await Promise.all(
+    substantial.map((c) => robotsAllowsUrl(cache, robotsRespectEnabled, c.url)),
+  );
+  let robotsDropped = 0;
+  const robotsAllowed: Candidate[] = [];
+  for (let i = 0; i < substantial.length; i++) {
+    const result = robotsChecks[i];
+    if (!result.allowed) {
+      robotsDropped += 1;
+      console.log(JSON.stringify({ event: "pool_dropped_robots", host: result.host }));
+      continue;
+    }
+    await honorCrawlDelay(result.crawlDelaySeconds);
+    robotsAllowed.push(substantial[i]);
+  }
+  robotsAllowed.sort((a, b) => publishedAtMs(b) - publishedAtMs(a));
 
   const drops: PoolDedupDrop[] = [];
 
   const seenCanonical = new Set<string>();
   const deduped: Candidate[] = [];
-  for (const candidate of substantial) {
+  for (const candidate of robotsAllowed) {
     const key = canonicalize(candidate.url);
     if (seenCanonical.has(key)) {
       const drop: PoolDedupDrop = { candidateTitle: candidate.title, reason: "url" };
@@ -469,5 +502,10 @@ export async function buildCandidatePool(
 
   const semanticFiltered = await applySemanticDedup(titleFiltered, semantic, now, drops);
 
-  return { pool: semanticFiltered.slice(0, POOL_CAP), dedupDrops: drops, blockedDropped };
+  return {
+    pool: semanticFiltered.slice(0, POOL_CAP),
+    dedupDrops: drops,
+    blockedDropped,
+    robotsDropped,
+  };
 }

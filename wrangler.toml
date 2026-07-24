@@ -110,6 +110,24 @@ SEARCH_MIN_SCORE = "0.5"
 # `deno task setup` yet) already degrades the same way on its own.
 IMAGES_ENABLED = "true"
 
+# robots.txt compliance (Task 48, README "robots.txt & bot transparency",
+# see packages/api/src/pipeline/robots.ts): before any server-side article
+# fetch, the target host's robots.txt is loaded (KV-cached 24h) and
+# evaluated against the generic `User-agent: *` group — this fetcher never
+# declares a distinct bot identity (see README for why). Agent-picked
+# candidates that are disallowed are dropped before ranking (no LLM spend);
+# a manually- or Telegram-added URL that's disallowed gets a 409 instead,
+# with an explicit owner override (?force=1 / "force" in the Telegram
+# message). The browser-extension path is unaffected — it supplies
+# pre-extracted HTML and never triggers a fetch. ROBOTS_RESPECT enabled by
+# default — only the literal "false" disables the whole feature.
+ROBOTS_RESPECT = "true"
+# Contact address shown on the public GET /bot transparency page for
+# removal requests — [vars] default "" (per the forkability policy, never
+# an owner-specific default, same as REPO_URL above); the contact section
+# is omitted from the page entirely while this is unset.
+CONTACT_EMAIL = ""
+
 [ai]
 binding = "AI"
 

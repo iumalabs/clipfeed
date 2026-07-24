@@ -200,6 +200,19 @@ export interface DuplicateArticleResponse {
   reason?: "similar_title";
 }
 
+// 409 body for POST /api/admin/articles (manual/extension adds) and the
+// Telegram save flow, when the target host's robots.txt disallows a
+// generic bot fetch of the article path — see packages/api/src/pipeline/robots.ts
+// and README "robots.txt & bot transparency". Distinct from
+// DuplicateArticleResponse: this is a policy block, not a dedup signal.
+// The owner can override it (?force=1 on the endpoint, "force" in the
+// Telegram message) — never returned at all when html is already supplied
+// (the extension path), since no server-side fetch would happen either way.
+export interface RobotsBlockedResponse {
+  error: "robots_disallowed";
+  host: string;
+}
+
 export interface ArticleListResponse {
   items: ArticleListItem[];
   next_cursor: string | null;

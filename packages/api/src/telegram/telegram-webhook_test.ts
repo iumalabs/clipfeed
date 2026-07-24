@@ -92,6 +92,12 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     TELEGRAM_BOT_TOKEN: "123:abc",
     TELEGRAM_WEBHOOK_SECRET: WEBHOOK_SECRET,
     TELEGRAM_OWNER_CHAT_ID: OWNER_CHAT_ID,
+    // Off by default in this shared fixture (unlike production's "true"
+    // default) so the many pre-existing tests here that save a URL don't
+    // depend on how a robots.txt cache-miss happens to parse whatever
+    // stubFetch's generic ARTICLE_HTML fallback returns — see the dedicated
+    // robots.txt tests further down, which explicitly set this to "true".
+    ROBOTS_RESPECT: "false",
     ...overrides,
   };
 }
@@ -500,6 +506,80 @@ Deno.test("webhook: duplicate URL -> immediate 'already saved' edit, no second p
     assertEquals(db.rows.length, 1); // no second row inserted
     const editCall = stub.telegramCalls.find((c) => c.method === "editMessageText");
     assertEquals(editCall!.body.text, "Уже сохранено");
+  } finally {
+    stub.restore();
+  }
+});
+
+// --- Task 48 §1.3: robots.txt gate on the Telegram URL-add flow ---
+
+Deno.test("webhook: a URL whose host disallows robots.txt gets the blocked reply instead of 'Сохраняю…', nothing saved", async () => {
+  const stub = stubFetch();
+  try {
+    const env = makeEnv({ ROBOTS_RESPECT: "true" });
+    await env.CACHE.put("robots:blocked.example", "User-agent: *\nDisallow: /");
+    const { ctx } = makeExecutionContext();
+
+    const res = await webhookRequest(
+      env,
+      ctx,
+      messageUpdate({ text: "https://blocked.example/story" }),
+    );
+    assertEquals(res.status, 200);
+    assertEquals(stub.telegramCalls.length, 1);
+    assertEquals(stub.telegramCalls[0].method, "sendMessage");
+    assertEquals(
+      (stub.telegramCalls[0].body.text as string).includes("robots.txt"),
+      true,
+    );
+    assertEquals((env.DB as FakeD1).rows.length, 0);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("webhook: appending 'force' to a blocked URL bypasses the robots.txt gate and saves normally", async () => {
+  const stub = stubFetch();
+  try {
+    const env = makeEnv({ ROBOTS_RESPECT: "true" });
+    await env.CACHE.put("robots:blocked.example", "User-agent: *\nDisallow: /");
+    const { ctx, settle } = makeExecutionContext();
+
+    const res = await webhookRequest(
+      env,
+      ctx,
+      messageUpdate({ text: "https://blocked.example/story force" }),
+    );
+    assertEquals(res.status, 200);
+    await settle();
+
+    assertEquals(stub.telegramCalls[0].body.text, "Сохраняю…");
+    const db = env.DB as FakeD1;
+    assertEquals(db.rows.length, 1);
+    assertEquals(db.rows[0].url, "https://blocked.example/story");
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("webhook: a URL whose host allows robots.txt saves normally, unaffected by the new gate", async () => {
+  const stub = stubFetch();
+  try {
+    const env = makeEnv({ ROBOTS_RESPECT: "true" });
+    await env.CACHE.put("robots:allowed.example", "User-agent: *\nAllow: /");
+    const { ctx, settle } = makeExecutionContext();
+
+    const res = await webhookRequest(
+      env,
+      ctx,
+      messageUpdate({ text: "https://allowed.example/story" }),
+    );
+    assertEquals(res.status, 200);
+    await settle();
+
+    assertEquals(stub.telegramCalls[0].body.text, "Сохраняю…");
+    const db = env.DB as FakeD1;
+    assertEquals(db.rows.length, 1);
   } finally {
     stub.restore();
   }

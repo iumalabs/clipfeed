@@ -177,6 +177,12 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     ANTHROPIC_API_KEY: "test-key",
     ACCESS_TEAM_DOMAIN: TEAM_DOMAIN,
     ACCESS_AUD: AUD,
+    // Off by default in this shared fixture (unlike production's "true"
+    // default) so tests here that count/assert on fetch calls to the
+    // article's own host aren't thrown off by an extra robots.txt lookup —
+    // see public-admin-routes_test.ts/telegram-webhook_test.ts for the
+    // dedicated robots.txt tests, which explicitly set this to "true".
+    ROBOTS_RESPECT: "false",
     ...overrides,
   };
 }

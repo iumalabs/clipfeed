@@ -142,6 +142,12 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     SUMMARY_BODY_TARGET_CHARS: "1200",
     DIGEST_HOUR_UTC: "6",
     ANTHROPIC_API_KEY: "test-key",
+    // Off by default in this shared fixture (unlike production's "true"
+    // default) so the many tests here that POST an article without
+    // stubbing fetch don't trigger a real network robots.txt lookup — see
+    // the dedicated robots.txt tests further down, which explicitly set
+    // this back to "true" and stub/seed accordingly.
+    ROBOTS_RESPECT: "false",
     ...overrides,
   };
 }
@@ -344,6 +350,7 @@ Deno.test("admin routes: 401 auth_not_configured on every mutating route when Ac
     ["POST", "/api/admin/articles"],
     ["PATCH", "/api/admin/articles/some-id"],
     ["DELETE", "/api/admin/articles/some-id"],
+    ["DELETE", "/api/admin/articles/some-id/image"],
     ["POST", "/api/admin/articles/some-id/retry"],
     ["POST", "/api/admin/articles/some-id/resummarize"],
     ["POST", "/api/admin/articles/some-id/translate"],
@@ -375,6 +382,7 @@ Deno.test("admin routes: 401 unauthorized on every mutating route when configure
     ["POST", "/api/admin/articles"],
     ["PATCH", "/api/admin/articles/some-id"],
     ["DELETE", "/api/admin/articles/some-id"],
+    ["DELETE", "/api/admin/articles/some-id/image"],
     ["POST", "/api/admin/articles/some-id/retry"],
     ["POST", "/api/admin/articles/some-id/resummarize"],
     ["POST", "/api/admin/articles/some-id/translate"],
@@ -565,6 +573,275 @@ Deno.test("POST /api/admin/articles: a blocked domain still saves (202), but the
   const body = await res.json();
   assertEquals(body.status, "pending");
   assertEquals(body.warning, "blocked_domain");
+});
+
+// --- Task 48 §1.3: robots.txt gate on POST /api/admin/articles ---
+
+Deno.test("POST /api/admin/articles: a host whose robots.txt disallows a generic fetch gets 409 {error: 'robots_disallowed'}", async () => {
+  const { env, authHeaders } = await makeOwnerContext({ ROBOTS_RESPECT: "true" });
+  const ctx = makeExecutionContext().ctx;
+  await env.CACHE.put("robots:blocked.example", "User-agent: *\nDisallow: /");
+
+  const res = await app.request(
+    "/api/admin/articles",
+    {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://blocked.example/some-story" }),
+    },
+    env,
+    ctx,
+  );
+  assertEquals(res.status, 409);
+  const body = await res.json();
+  assertEquals(body, { error: "robots_disallowed", host: "blocked.example" });
+});
+
+Deno.test("POST /api/admin/articles?force=1: bypasses the robots.txt gate and saves anyway", async () => {
+  const { env, authHeaders } = await makeOwnerContext({ ROBOTS_RESPECT: "true" });
+  const ctx = makeExecutionContext().ctx;
+  await env.CACHE.put("robots:blocked.example", "User-agent: *\nDisallow: /");
+
+  const res = await app.request(
+    "/api/admin/articles?force=1",
+    {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://blocked.example/some-story" }),
+    },
+    env,
+    ctx,
+  );
+  assertEquals(res.status, 202);
+  const body = await res.json();
+  assertEquals(body.status, "pending");
+});
+
+Deno.test("POST /api/admin/articles: a host whose robots.txt allows the path saves normally (202)", async () => {
+  const { env, authHeaders } = await makeOwnerContext({ ROBOTS_RESPECT: "true" });
+  const ctx = makeExecutionContext().ctx;
+  await env.CACHE.put("robots:allowed.example", "User-agent: *\nAllow: /");
+
+  const res = await app.request(
+    "/api/admin/articles",
+    {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://allowed.example/some-story" }),
+    },
+    env,
+    ctx,
+  );
+  assertEquals(res.status, 202);
+});
+
+Deno.test("POST /api/admin/articles: the extension path (html supplied) never consults robots.txt at all, even on a fully-disallowed host", async () => {
+  const { env, authHeaders } = await makeOwnerContext({ ROBOTS_RESPECT: "true" });
+  const ctx = makeExecutionContext().ctx;
+  await env.CACHE.put("robots:blocked.example", "User-agent: *\nDisallow: /");
+
+  const res = await app.request(
+    "/api/admin/articles",
+    {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://blocked.example/some-story",
+        html: ARTICLE_HTML,
+        added_via: "extension",
+      }),
+    },
+    env,
+    ctx,
+  );
+  // 202, not 409 — no server-side fetch happens for this path either way,
+  // so there's nothing for robots.txt to gate.
+  assertEquals(res.status, 202);
+});
+
+// --- Task 48 Part 3: DELETE /api/admin/articles/:id/image ---
+
+function makeFakeR2Bucket(): { bucket: R2Bucket; deletedKeys: string[] } {
+  const objects = new Map<string, Uint8Array>();
+  const deletedKeys: string[] = [];
+  const bucket = {
+    get(key: string) {
+      const bytes = objects.get(key);
+      if (!bytes) return Promise.resolve(null);
+      return Promise.resolve({ body: bytes } as unknown);
+    },
+    put(key: string, value: Uint8Array) {
+      objects.set(key, value);
+      return Promise.resolve({} as unknown);
+    },
+    delete(key: string) {
+      deletedKeys.push(key);
+      objects.delete(key);
+      return Promise.resolve();
+    },
+  } as unknown as R2Bucket;
+  return { bucket, deletedKeys };
+}
+
+Deno.test("DELETE /api/admin/articles/:id/image: 401 without auth, 401 auth_not_configured when Access isn't set up", async () => {
+  const unconfigured = makeEnv();
+  const unconfiguredCtx = makeExecutionContext().ctx;
+  const noConfigRes = await app.request(
+    "/api/admin/articles/some-id/image",
+    { method: "DELETE" },
+    unconfigured,
+    unconfiguredCtx,
+  );
+  assertEquals(noConfigRes.status, 401);
+  assertEquals((await noConfigRes.json()).error, "auth_not_configured");
+
+  const { env } = await makeOwnerContext();
+  const ctx = makeExecutionContext().ctx;
+  const noTokenRes = await app.request(
+    "/api/admin/articles/some-id/image",
+    { method: "DELETE" },
+    env,
+    ctx,
+  );
+  assertEquals(noTokenRes.status, 401);
+  assertEquals((await noTokenRes.json()).error, "unauthorized");
+});
+
+Deno.test("DELETE /api/admin/articles/:id/image: 404 for a missing article, and for an article with no image", async () => {
+  const { env, authHeaders } = await makeOwnerContext();
+  const ctx = makeExecutionContext().ctx;
+
+  const missingRes = await app.request(
+    "/api/admin/articles/does-not-exist/image",
+    { method: "DELETE", headers: authHeaders },
+    env,
+    ctx,
+  );
+  assertEquals(missingRes.status, 404);
+
+  await insertPendingArticle(env.DB, {
+    id: "img-none",
+    url: "https://example.com/img-none",
+    title: "img-none",
+    source: "example.com",
+    tags: [],
+    added_via: "manual",
+    added_at: "2026-01-01T00:00:00.000Z",
+  });
+  const noImageRes = await app.request(
+    "/api/admin/articles/img-none/image",
+    { method: "DELETE", headers: authHeaders },
+    env,
+    ctx,
+  );
+  assertEquals(noImageRes.status, 404);
+});
+
+Deno.test("DELETE /api/admin/articles/:id/image: 204, purges the R2 object, and clears image_key/source/dimensions without touching the rest of the article", async () => {
+  const { bucket, deletedKeys } = makeFakeR2Bucket();
+  const { env, authHeaders } = await makeOwnerContext({ IMAGES: bucket });
+  const ctx = makeExecutionContext().ctx;
+
+  await insertPendingArticle(env.DB, {
+    id: "img-present",
+    url: "https://example.com/img-present",
+    title: "img-present",
+    source: "example.com",
+    tags: [],
+    added_via: "manual",
+    added_at: "2026-01-01T00:00:00.000Z",
+  });
+  const db = env.DB as unknown as FakeD1;
+  const row = db.rows.find((r) => r.id === "img-present")!;
+  row.status = "ready";
+  row.image_key = "articles/img-present.jpg";
+  row.image_source_url = "https://example.com/photo.jpg";
+  row.image_width = 800;
+  row.image_height = 600;
+
+  const res = await app.request(
+    "/api/admin/articles/img-present/image",
+    { method: "DELETE", headers: authHeaders },
+    env,
+    ctx,
+  );
+  assertEquals(res.status, 204);
+  assertEquals(deletedKeys, ["articles/img-present.jpg"]);
+
+  const after = db.rows.find((r) => r.id === "img-present")!;
+  assertEquals(after.image_key, null);
+  assertEquals(after.image_source_url, null);
+  assertEquals(after.image_width, null);
+  assertEquals(after.image_height, null);
+  assertEquals(after.status, "ready"); // untouched
+  assertEquals(after.url, "https://example.com/img-present"); // untouched
+});
+
+Deno.test("DELETE /api/admin/articles/:id/image: a second call after success 404s (idempotent-friendly, not a silent second 204)", async () => {
+  const { bucket } = makeFakeR2Bucket();
+  const { env, authHeaders } = await makeOwnerContext({ IMAGES: bucket });
+  const ctx = makeExecutionContext().ctx;
+
+  await insertPendingArticle(env.DB, {
+    id: "img-twice",
+    url: "https://example.com/img-twice",
+    title: "img-twice",
+    source: "example.com",
+    tags: [],
+    added_via: "manual",
+    added_at: "2026-01-01T00:00:00.000Z",
+  });
+  const db = env.DB as unknown as FakeD1;
+  db.rows.find((r) => r.id === "img-twice")!.image_key = "articles/img-twice.jpg";
+
+  const first = await app.request(
+    "/api/admin/articles/img-twice/image",
+    { method: "DELETE", headers: authHeaders },
+    env,
+    ctx,
+  );
+  assertEquals(first.status, 204);
+
+  const second = await app.request(
+    "/api/admin/articles/img-twice/image",
+    { method: "DELETE", headers: authHeaders },
+    env,
+    ctx,
+  );
+  assertEquals(second.status, 404);
+});
+
+// --- Task 48 Part 2: GET /bot (public, no auth) ---
+
+Deno.test("GET /bot: 200, no auth required, mentions robots.txt compliance and omits the contact section when CONTACT_EMAIL is unset", async () => {
+  const env = makeEnv({ AGENT_DAILY_PICKS: "7", ROBOTS_RESPECT: "true", CONTACT_EMAIL: "" });
+  const ctx = makeExecutionContext().ctx;
+
+  const res = await app.request("/bot", {}, env, ctx);
+  assertEquals(res.status, 200);
+  const html = await res.text();
+  assertEquals(html.includes("ClipFeed"), true);
+  assertEquals(html.includes("7"), true);
+  assertEquals(html.includes("honors"), true);
+  assertEquals(html.includes("mailto:"), false);
+});
+
+Deno.test("GET /bot: includes a mailto: contact link when CONTACT_EMAIL is set", async () => {
+  const env = makeEnv({ CONTACT_EMAIL: "owner@example.com" });
+  const ctx = makeExecutionContext().ctx;
+
+  const res = await app.request("/bot", {}, env, ctx);
+  const html = await res.text();
+  assertEquals(html.includes("mailto:owner@example.com"), true);
+});
+
+Deno.test("GET /bot: says robots.txt is NOT honored when ROBOTS_RESPECT=false", async () => {
+  const env = makeEnv({ ROBOTS_RESPECT: "false" });
+  const ctx = makeExecutionContext().ctx;
+
+  const res = await app.request("/bot", {}, env, ctx);
+  const html = await res.text();
+  assertEquals(html.includes("disabled robots.txt checking"), true);
 });
 
 Deno.test("POST /api/admin/articles: a non-blocked domain saves with no warning field at all", async () => {

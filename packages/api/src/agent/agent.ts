@@ -14,6 +14,7 @@ import { resolveEmbeddingModel } from "../search/embeddings.ts";
 import { loadBlocklistConfig } from "./curation.ts";
 import { listAutoBlocks } from "./autoblock.ts";
 import { type AgentRunTrigger, recordAgentRun } from "./agent-run-tracker.ts";
+import { isRobotsRespectEnabled } from "../pipeline/robots.ts";
 
 // Structured, category-level stage log for the agent job — counts and ids
 // only, never candidate titles/snippets or credentials.
@@ -72,7 +73,7 @@ export async function runAgentJob(
   const autoBlockedDomains = new Set(autoBlocks.map((entry) => entry.domain));
 
   const poolStart = performance.now();
-  const { pool, dedupDrops, blockedDropped } = await buildCandidatePool(
+  const { pool, dedupDrops, blockedDropped, robotsDropped } = await buildCandidatePool(
     env.DB,
     env.CACHE,
     candidates,
@@ -85,6 +86,7 @@ export async function runAgentJob(
       threshold: parseSemanticDedupThreshold(env.SEMANTIC_DEDUP_THRESHOLD),
     },
     { blockedDomains: blocklistConfig.blockedDomains, autoBlockedDomains },
+    isRobotsRespectEnabled(env.ROBOTS_RESPECT),
   );
   const dedupDropCounts = { url: 0, title: 0, jaccard: 0, semantic: 0 };
   for (const drop of dedupDrops) dedupDropCounts[drop.reason] += 1;
@@ -94,6 +96,7 @@ export async function runAgentJob(
     dedup_dropped: dedupDrops.length,
     dedup_dropped_by_reason: dedupDropCounts,
     blocked_dropped: blockedDropped,
+    robots_dropped: robotsDropped,
   });
 
   if (pool.length === 0) {

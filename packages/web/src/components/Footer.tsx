@@ -25,6 +25,8 @@ export function Footer({ dict, repoUrl }: FooterProps) {
           : dict.footerLicenseLabel}
         <span class="app-footer-sep" aria-hidden="true">·</span>
         {dict.footerContentNotice}
+        <span class="app-footer-sep" aria-hidden="true">·</span>
+        <a href="/bot">{dict.footerBotLinkLabel}</a>
       </p>
     </footer>
   );

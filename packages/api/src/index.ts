@@ -5,12 +5,14 @@ import type {
   DuplicateArticleResponse,
   EmbeddingsBackfillResponse,
   QueueMessage,
+  RobotsBlockedResponse,
 } from "@clipfeed/shared/types";
 import { accessAuth, type AppEnv } from "./auth/access-middleware.ts";
 import { readTurnstileConfig } from "./auth/turnstile-middleware.ts";
 import type { ListArticlesParams } from "./articles/db.ts";
 import {
   backfillNormalizedTags,
+  clearArticleImage,
   countUnembeddedArticles,
   deleteArticle,
   findArticleIdByUrl,
@@ -80,6 +82,8 @@ import { loadBlocklistConfig, loadCurationConfig } from "./agent/curation.ts";
 import { normalizeDomainInput, resolveDomainPrecedence } from "./agent/domain-block.ts";
 import { hostname } from "./lib/url-host.ts";
 import { clearAutoBlock, isAutoBlocked, listAutoBlocks } from "./agent/autoblock.ts";
+import { isRobotsRespectEnabled, robotsAllowsUrl } from "./pipeline/robots.ts";
+import { buildBotPageHtml } from "./bot-page.ts";
 import openApiSpec from "../openapi.json" with { type: "json" };
 
 const app = new Hono<AppEnv>();
@@ -160,6 +164,23 @@ app.get("/docs", (c) => {
 </body>
 </html>
 `,
+  );
+});
+
+// Task 48 Part 2: public transparency page for any webmaster/crawler-
+// operator who notices this fetcher's requests in their own logs — what it
+// is, what it publishes (summaries + attribution, never full text), whether
+// this instance honors robots.txt, and how to request a removal. Plain
+// server-rendered HTML, not the SPA shell — there's no per-request dynamic
+// data worth a client-side render here.
+app.get("/bot", (c) => {
+  return c.html(
+    buildBotPageHtml({
+      dailyPicks: parseAgentDailyPicks(c.env.AGENT_DAILY_PICKS),
+      robotsRespected: isRobotsRespectEnabled(c.env.ROBOTS_RESPECT),
+      contactEmail: (c.env.CONTACT_EMAIL ?? "").trim() || null,
+      repoUrl: (c.env.REPO_URL ?? "").trim() || null,
+    }),
   );
 });
 
@@ -491,6 +512,27 @@ app.post("/api/admin/articles", async (c) => {
     }
   }
 
+  // Task 48 §1.3: only relevant when a server-side fetch will actually
+  // happen — html !== undefined (the extension path, which extracts HTML
+  // client-side) never fetches at all, so the check is skipped entirely
+  // rather than blocking a save that was never going to touch the target
+  // host's server. ?force=1 is an explicit owner override: the owner may
+  // legitimately want a page they can already read themselves saved anyway.
+  const force = c.req.query("force") === "1";
+  if (html === undefined && !force) {
+    const robots = await robotsAllowsUrl(
+      c.env.CACHE,
+      isRobotsRespectEnabled(c.env.ROBOTS_RESPECT),
+      url,
+    );
+    if (!robots.allowed) {
+      return c.json(
+        { error: "robots_disallowed", host: robots.host } satisfies RobotsBlockedResponse,
+        409,
+      );
+    }
+  }
+
   const id = crypto.randomUUID();
 
   await insertPendingArticle(c.env.DB, {
@@ -540,6 +582,25 @@ app.delete("/api/admin/articles/:id", async (c) => {
   // embeddings.ts's deleteArticleEmbedding), so this is safe to call
   // unconditionally regardless of whether the row ever actually got embedded.
   await deleteArticleEmbedding(c.env.VECTORS, id);
+  return c.body(null, 204);
+});
+
+// Task 48 Part 3: fast, deploy-free removal of just an article's image —
+// e.g. honoring a takedown request without discarding the whole article or
+// its summary. 404 when the article doesn't exist or already has no image
+// (idempotent-friendly: a retry after success also 404s rather than a
+// silent second 204). Deletes the R2 object first (a no-op when IMAGES
+// isn't bound — a fork without the bucket provisioned can't have stored
+// anything there anyway), then clears the DB columns.
+app.delete("/api/admin/articles/:id/image", async (c) => {
+  const id = c.req.param("id");
+  const article = await getArticleById(c.env.DB, id);
+  if (!article?.image_key) return c.json({ error: "not found" }, 404);
+
+  if (c.env.IMAGES) {
+    await c.env.IMAGES.delete(article.image_key);
+  }
+  await clearArticleImage(c.env.DB, id);
   return c.body(null, 204);
 });
 
