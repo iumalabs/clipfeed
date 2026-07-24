@@ -426,6 +426,56 @@ instead of showing a broken-image icon.
 `twitter:card` to `"summary_large_image"`. Telegram's own link-preview crawler then renders the card
 with the image automatically, the same mechanism that already renders the title/description.
 
+**Removal:** `DELETE /api/admin/articles/:id/image` (Access-protected) purges just the stored R2
+object and clears `image_key`/`image_source_url`/`image_width`/`image_height` — without touching the
+rest of the article — for when only the image itself is the concern (e.g. a takedown or licensing
+request). `DELETE /api/admin/articles/:id` removes the whole article when that's what's needed
+instead. See "robots.txt & bot transparency" below.
+
+## robots.txt & bot transparency
+
+Before any server-side article fetch, the target host's `robots.txt` is loaded (KV-cached for 24h)
+and evaluated against the generic `User-agent: *` group — this fetcher never declares a distinct bot
+identity (see below for why) — with a small parser (`packages/api/src/pipeline/robots.ts`):
+user-agent group selection, `Allow`/`Disallow` with longest-match-wins (ties favor `Allow`), `*`/`$`
+wildcards, and `Crawl-delay` (honored with a plain `await` right before the fetch — the queue is
+sequential, so no per-host scheduler is needed). Any failure along the way — a non-200 response, a
+network timeout, unparseable content, even a KV read/write error — is treated as fully **allowed**,
+the standard lenient default: `robots.txt` is an opt-in signal, and a failure on our own
+infrastructure must never silently block ingestion the way a real `Disallow` would.
+
+**Enforcement differs by how an article enters the system:**
+
+- **Scraping agent candidates** (`agent-pool.ts`) — a disallowed candidate is dropped before
+  ranking, so no LLM spend is wasted on it; logged as `pool_dropped_robots`.
+- **Manual add / Telegram link** (`POST /api/admin/articles`, or pasting a link to the bot) — a
+  disallowed URL gets `409 {"error": "robots_disallowed", "host": "..."}` instead of being saved,
+  but the owner can override it: `?force=1` on the endpoint, or resend the same link to the bot with
+  "force" appended. The owner may legitimately want to save a page they can already read themselves.
+- **Chrome extension** — entirely unaffected. It extracts the page's HTML client-side, in the user's
+  own already-open tab, and submits that directly; the server never fetches the page itself, so
+  there's nothing for `robots.txt` to gate.
+- **Article images** — follow the exact same verdict as their article: a disallowed article's HTML
+  is never fetched, so its `og:image` is never even discovered.
+
+`ROBOTS_RESPECT` (`[vars]`, default `"true"`) turns off every check above — only the literal
+`"false"` disables it, reverting server-side fetches to how they behaved before this feature
+existed.
+
+**Why the fetcher's User-Agent stays a plain browser string:** an audit of this project's own live
+instance (`docs/robots-audit.md`) found zero of the ten configured RSS sources disallow a generic
+bot fetch of an actual article path — only _named_ AI-training crawlers (GPTBot, ClaudeBot, CCBot,
+etc.) are singled out — and only 1 of 92 real saved articles would have been dropped by honoring
+`robots.txt` (a Nitter mirror that blocks every bot, already separately caught by the thin-host
+filter). Declaring a bot identity, by contrast, would likely cost _more_: several of those same
+sources maintain long, actively-curated blocklists that target exactly that signal.
+
+**Public transparency page:** `GET /bot` (linked from the site footer) explains what ClipFeed is,
+that it publishes attributed summaries with a link to the original rather than republishing article
+text, roughly how many articles it adds per day, whether this instance currently honors
+`robots.txt`, and how to request a removal — via `CONTACT_EMAIL` (`[vars]`, empty by default; the
+removal section is omitted entirely while it's unset) and/or `REPO_URL`.
+
 ## Database
 
 Apply migrations locally with:
@@ -585,9 +635,15 @@ is tied to a specific account, domain, or Access team.
    - **`REPO_URL`** (e.g. `https://github.com/you/clipfeed`) — your fork's repo. Shows a GitHub icon
      link in the header and turns the footer's "MIT" text into a link to your `LICENSE` file. Both
      stay hidden until you set it.
+   - **`CONTACT_EMAIL`** (optional, `[vars]`, empty by default) — adds an email contact to the
+     public `GET /bot` transparency page's removal section (see "robots.txt & bot transparency"
+     below); the section is omitted entirely while this is unset.
 
-   `deno task setup` (step 2) prints a reminder naming both if either is still empty after
-   provisioning.
+   `deno task setup` (step 2) prints a reminder naming `PUBLIC_BASE_URL`/`REPO_URL` if either is
+   still empty after provisioning.
+
+   `ROBOTS_RESPECT` (`[vars]`, default `"true"`) needs no action from you — it's on out of the box;
+   see "robots.txt & bot transparency" below if you want to understand or disable it.
 
 See `.dev.vars.example` for local-dev secrets and variable overrides, and [CLAUDE.md](CLAUDE.md) for
 the forkability policy new changes must follow.
