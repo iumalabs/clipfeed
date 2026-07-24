@@ -421,10 +421,22 @@ attribution the paragraph above promises. Both use `loading="lazy"`, `decoding="
 explicit width/height to avoid layout shift; a failed image load hides the element gracefully
 instead of showing a broken-image icon.
 
-**Telegram:** no `sendPhoto` call — instead, when an article has an image, `GET /a/:id`'s OG tags
-(see "Link previews" below) include `og:image` (an absolute URL to `/img/:id`) and switch
-`twitter:card` to `"summary_large_image"`. Telegram's own link-preview crawler then renders the card
-with the image automatically, the same mechanism that already renders the title/description.
+**Telegram:** the drip post uploads the article's image directly via `sendPhoto` (see
+`telegram-publish.ts`), with the post text as the photo's caption (Telegram's 1024-char caption
+budget, vs. 4096 for a plain text message — bullets are trimmed first, then the TL;DR, same priority
+order both budgets share). This sidesteps Telegram's link-preview crawler entirely, which never
+renders a preview for this instance regardless of `og:image`/`link_preview_options` tuning (see Task
+46/47's investigation in the PR history — `/a/:id` and `/img/:id` are both reachable and correctly
+tagged from the outside, so the failure isn't ours to fix by tuning further).
+
+`sendPhoto` is skipped, falling back to the original `sendMessage` + OG-tag/`link_preview_options`
+post, whenever there's nothing eligible to upload: no image on the article, no `IMAGES` binding
+configured, the image's aspect ratio or combined width+height exceeds Telegram's own photo limits
+(`photoDimensionsWithinLimits`), the stored object is missing or its content-type isn't recognized,
+it exceeds Telegram's 10 MB photo cap, or the R2 read itself fails. A `sendPhoto` call that fails
+outright (network/API error) is never caught here — the candidate simply isn't marked published, so
+the next drip tick retries it, the same self-healing behavior as any other transient
+Telegram/network failure.
 
 **Removal:** `DELETE /api/admin/articles/:id/image` (Access-protected) purges just the stored R2
 object and clears `image_key`/`image_source_url`/`image_width`/`image_height` — without touching the
