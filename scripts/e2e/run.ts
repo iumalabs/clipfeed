@@ -57,7 +57,7 @@ function run(cmd: string[], opts: Deno.CommandOptions = {}): Promise<Deno.Comman
 
 async function writeE2EWranglerConfig(): Promise<void> {
   const original = await Deno.readTextFile("wrangler.toml");
-  const patched = original
+  let patched = original
     .replace(/^PENDING_TIMEOUT_MIN = \d+$/m, `PENDING_TIMEOUT_MIN = ${NEVER_SWEEP_MINUTES}`)
     .replace(/^QUEUE_WAIT_TIMEOUT_MIN = \d+$/m, `QUEUE_WAIT_TIMEOUT_MIN = ${NEVER_SWEEP_MINUTES}`);
   if (patched === original) {
@@ -65,6 +65,31 @@ async function writeE2EWranglerConfig(): Promise<void> {
       "writeE2EWranglerConfig: neither PENDING_TIMEOUT_MIN nor QUEUE_WAIT_TIMEOUT_MIN matched in wrangler.toml — check the pattern still matches after any config changes",
     );
   }
+
+  // The [ai] and [[vectorize]] bindings are remote-only — even just
+  // DECLARING them makes `wrangler dev` try to "establish a remote
+  // connection" (confirmed empirically) before it'll serve a single
+  // request, which needs either `wrangler login` or a CLOUDFLARE_API_TOKEN.
+  // That's fine for a developer's own `deno task dev` (already logged in to
+  // deploy their own fork) but breaks in a fresh CI runner with no
+  // Cloudflare credentials at all — exactly the "no dependency on...
+  // third parties" guarantee this suite is supposed to have. None of the
+  // seeded fixtures ever exercise either binding (every row is inserted
+  // directly via SQL, never through the real pipeline/search-embed path —
+  // see seed-sql.ts), and every call site already degrades gracefully when
+  // the binding is simply absent (search falls back to LIKE, semantic dedup
+  // skips its layer — see embeddings.ts/search.ts), so removing them here
+  // is a strict improvement over relying on `wrangler dev`'s own vectorize-
+  // unsupported-locally fallback, which still needed a login to even get
+  // that far.
+  const withoutRemoteBindings = patched.replace(/\[ai\][\s\S]*?(?=\[\[r2_buckets\]\])/, "");
+  if (withoutRemoteBindings === patched) {
+    throw new Error(
+      "writeE2EWranglerConfig: [ai]/[[vectorize]] block not found in wrangler.toml — check the pattern still matches after any config changes",
+    );
+  }
+  patched = withoutRemoteBindings;
+
   await Deno.writeTextFile(E2E_WRANGLER_CONFIG, patched);
 }
 
