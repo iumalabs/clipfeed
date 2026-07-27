@@ -9,7 +9,8 @@
     "deploy": "deno task build && deno run -A npm:wrangler deploy",
     "test": "deno test -A",
     "fmt": "deno fmt",
-    "lint": "deno lint"
+    "lint": "deno lint",
+    "e2e": "deno run -A scripts/e2e/run.ts"
   },
   "imports": {
     "hono": "npm:hono@^4.6.0",
@@ -37,6 +38,8 @@
       "dist/",
       "node_modules/",
       ".wrangler/",
+      ".wrangler-e2e/",
+      "e2e/",
       "deno.lock",
       "**/*.min.js",
       "**/*.min.css",
@@ -44,7 +47,15 @@
     ]
   },
   "lint": {
-    "exclude": ["packages/web/vendor/", "docs/assets/", "dist/", "node_modules/", ".wrangler/"]
+    "exclude": [
+      "packages/web/vendor/",
+      "docs/assets/",
+      "dist/",
+      "node_modules/",
+      ".wrangler/",
+      ".wrangler-e2e/",
+      "e2e/"
+    ]
   },
   "allowScripts": ["npm:sharp", "npm:workerd"]
 }

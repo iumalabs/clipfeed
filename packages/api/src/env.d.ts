@@ -194,6 +194,22 @@ declare global {
     // Worker serves openly (fork/dev bootstrap mode).
     ACCESS_TEAM_DOMAIN?: string;
     ACCESS_AUD?: string;
+    // Task 50: LOCAL-ONLY Playwright E2E test bypass (see
+    // auth/access-middleware.ts's e2eTestModeBypass) — undefined by default,
+    // and NEVER set in this repo's committed wrangler.toml [vars]. Must be
+    // the exact string "true" (not merely truthy) AND paired with a specific
+    // request header the Playwright harness alone sends before any bypass
+    // takes effect; either condition missing falls through to real Access
+    // verification. The e2e harness enables it via `wrangler dev --var
+    // E2E_TEST_MODE:true` (see scripts/e2e/run.ts) — a CLI-only override that
+    // never touches wrangler.toml, so a real `wrangler deploy` cannot have
+    // this set without someone deliberately adding the same `--var` flag to
+    // the deploy command itself.
+    //
+    // !!! NEVER set this in a production deployment !!! Doing so lets any
+    // request that also sends the test header authenticate as the owner,
+    // bypassing Access entirely.
+    E2E_TEST_MODE?: string;
     // Cloudflare Turnstile bot protection for mutating endpoints: optional,
     // active only when BOTH are set (trimmed non-empty). Site key is public
     // by nature ([vars] default ""); secret key must be a real secret.

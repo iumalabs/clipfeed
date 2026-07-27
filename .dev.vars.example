@@ -82,6 +82,16 @@
 # ACCESS_TEAM_DOMAIN=your-team.cloudflareaccess.com
 # ACCESS_AUD=
 
+# TESTING ONLY — Playwright E2E owner-mode bypass (see README "E2E tests",
+# access-middleware.ts). NEVER set this in production, or in any .dev.vars
+# used for real local development against real data — leaving it "true"
+# lets any request that also sends the X-E2E-Test-Owner header authenticate
+# as the owner, skipping Cloudflare Access entirely. The `deno task e2e`
+# harness sets this itself via `wrangler dev --var E2E_TEST_MODE:true` and
+# never needs it written here — this line only documents that the var
+# exists; do not uncomment it for normal development.
+# E2E_TEST_MODE=true
+
 # Cloudflare Turnstile bot protection (see README "Bot protection
 # (Turnstile)"). Optional — only activates once BOTH are set. Requests
 # carrying a verified Access identity bypass Turnstile entirely, so a

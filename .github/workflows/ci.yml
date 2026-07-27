@@ -53,3 +53,54 @@ jobs:
           # no separate secret needed.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # No GITLEAKS_LICENSE needed — that's only required for private repos.
+
+  # Task 50: Playwright E2E suite (see e2e/, scripts/e2e/run.ts) — deliberately
+  # ADVISORY (job-level continue-on-error), not blocking, unlike `check`
+  # above. Reasoning: browser E2E carries materially more infra-flake risk
+  # (timing, runner resource contention, a first-time browser download) than
+  # the existing fast Deno unit/integration suite, and the class of bug this
+  # guards against (Tasks 40/49 — browser-integration regressions unit tests
+  # can't see) is exactly caught structurally and DETERMINISTICALLY by the
+  # Part C contract tests instead, which already run in the blocking `check`
+  # job above via the ordinary `deno task test` (no separate wiring needed —
+  # they're plain Deno tests). A flaky E2E failure blocking every PR
+  # (including ones that never touch the SPA) would violate this suite's own
+  # design goal of never gating a code-unrelated merge. This is marked
+  # advisory-with-visible-status: a run still appears on the PR (so a real
+  # regression is never silent), it just can't block the merge on its own —
+  # revisit this once the suite has a track record of not flaking in this
+  # CI environment.
+  e2e:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.9.1"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Playwright + Chromium
+        run: |
+          npm --prefix e2e ci
+          npx --prefix e2e playwright install --with-deps chromium
+
+      - name: Run E2E suite
+        run: deno task e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7

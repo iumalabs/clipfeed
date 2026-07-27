@@ -29,7 +29,8 @@ deno task dev     # build, then run wrangler dev with local D1/KV
 deno task build   # esbuild-bundle the API and the Preact SPA into dist/
 deno task setup   # one-time: create/reuse your D1 + KV resources, apply migrations
 deno task deploy  # build, then wrangler deploy
-deno task test    # run the test suite
+deno task test    # run the test suite (fast — no browser)
+deno task e2e     # run the Playwright E2E suite against a real local worker (see "Testing" below)
 deno task fmt     # format
 deno task lint    # lint
 ```
@@ -44,6 +45,44 @@ packages/extension/             Chrome extension (Manifest V3, see "Chrome exten
 packages/shared/src/types.ts    Types shared between API, SPA, and extension
 migrations/                     D1 schema migrations
 ```
+
+## Testing
+
+Two layers, both required to run cleanly before opening a PR:
+
+- **`deno task test`** — fast, in-process unit and integration tests (no browser, no real network).
+  This includes contract tests (`packages/api/src/wire-shape-contract_test.ts`) that assert a real
+  response from every list/detail/search route contains every field the SPA's wire shapes
+  (`ArticleListItem`, `PublicArticle`, `SummaryJson`, `SearchResultItem`) declare — the field lists
+  themselves (`packages/shared/src/wire-shape-keys.ts`) are checked against their source interfaces
+  at compile time, so a column silently dropped from a SQL `SELECT`/projection function fails here
+  immediately instead of surfacing later as a quietly-broken SPA feature.
+- **`deno task e2e`** — a small Playwright suite (`e2e/`) covering browser-integration regressions
+  unit tests structurally can't see: feed pagination + the poll's merge-without-truncation
+  guarantee, EN-translate viewport gating, owner-vs-visitor visibility, keyword/semantic search, and
+  deep-link + logo reset. It boots a real local `wrangler dev` against an isolated D1
+  (`.wrangler-e2e/`, entirely separate from `deno task dev`'s own `.wrangler/` state), seeds
+  deterministic fixtures directly via SQL (never through the real pipeline, so no Workers AI call —
+  even local `wrangler dev` calls the real Cloudflare account for AI/Vectorize, which this suite
+  avoids entirely), runs the suite, then tears everything down. Playwright runs under **Node**
+  (`e2e/` is a small sidecar with its own `package.json`), not Deno's npm compat — Playwright's
+  browser-automation internals are Node-first and heavily process/worker-thread-dependent, and
+  keeping it isolated means it can never disrupt the existing `deno task` commands. First run needs
+  `npx --prefix e2e playwright install --with-deps
+  chromium` once to fetch the browser.
+
+  Owner-mode E2E flows use a **local-only test bypass** (`E2E_TEST_MODE`, see
+  `packages/api/src/auth/access-middleware.ts`) since real Cloudflare Access can't run against a
+  local worker — it's gated behind two independent conditions (an env var the harness alone sets,
+  plus a request header the harness alone sends) and is provably inert otherwise (see
+  `access-middleware_test.ts`'s dedicated inertness suite). **Never set `E2E_TEST_MODE` on a real
+  deployment** — wrangler.toml's committed `[vars]` never sets it, and the harness only ever enables
+  it via a CLI flag on its own throwaway `wrangler dev` invocation.
+
+  CI runs this suite too, but as an **advisory** (non-blocking) job — see
+  `.github/workflows/ci.yml`'s comment for the reasoning (browser E2E carries more infra-flake risk
+  than the fast test job, and the drift class it exists to catch is already caught deterministically
+  by the contract tests above, which do block).
 
 ## API documentation
 

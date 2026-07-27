@@ -1,8 +1,17 @@
 dist/
 .wrangler/
+.wrangler-e2e/
+wrangler.e2e.toml
 node_modules/
 *.log
 .env
 .env.*
 .dev.vars
 .claude/
+
+# Task 50: Playwright E2E sidecar (see e2e/, scripts/e2e/) — a Node project,
+# not Deno-managed, deliberately excluded from deno.json's fmt/lint/test.
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
+e2e/.cache/
