@@ -19,20 +19,31 @@ export function feedPollDelayMs(elapsedMs: number): number {
   return elapsedMs < FAST_PHASE_MS ? FAST_INTERVAL_MS : SLOW_INTERVAL_MS;
 }
 
-// Refreshes every currently-pending card from a fresh list snapshot, by id.
-// Deliberately narrow: only touches rows that are BOTH already in `current`
-// AND still pending — never inserts a row `current` doesn't have (that would
-// be an unrequested page/filter change sneaking in) and never overwrites a
-// row that already resolved locally (e.g. via a manual "Check now" that beat
-// this tick to the punch).
+// Refreshes every currently-pending card from a fresh list snapshot, by id,
+// and surfaces brand-new arrivals. Two distinct behaviors:
+//  - A row already in `current`: only touched if it's still pending — never
+//    overwrites a row that already resolved locally (e.g. via a manual
+//    "Check now" that beat this tick to the punch).
+//  - A snapshot row with NO match in `current` at all: this is a genuinely
+//    new article. The poll always fetches the unfiltered first page (newest
+//    first, no cursor — see App.tsx), so anything here `current` doesn't
+//    have yet is newer than everything already loaded; it's prepended,
+//    preserving the snapshot's own newest-first order, rather than making
+//    the user wait for a full reload to notice a new arrival. Never
+//    truncates or reorders what was already there.
 export function applyFeedPollSnapshot(
   current: readonly ArticleListItem[],
   snapshot: readonly ArticleListItem[],
 ): ArticleListItem[] {
   const bySnapshotId = new Map(snapshot.map((a) => [a.id, a] as const));
-  return current.map((a) => {
+  const currentIds = new Set(current.map((a) => a.id));
+
+  const refreshed = current.map((a) => {
     if (a.status !== "pending") return a;
     const fresh = bySnapshotId.get(a.id);
     return fresh ? { ...a, ...fresh } : a;
   });
+
+  const brandNew = snapshot.filter((a) => !currentIds.has(a.id));
+  return brandNew.length > 0 ? [...brandNew, ...refreshed] : refreshed;
 }

@@ -27,3 +27,61 @@ export function shouldFetchOnEarlierExpand(
 ): boolean {
   return earlierItemCount === 0 && nextCursor !== null;
 }
+
+export interface PaginatedPage<T> {
+  items: T[];
+  next_cursor: string | null;
+}
+
+export interface FetchInitialPagesResult<T> {
+  items: T[];
+  nextCursor: string | null;
+  // Non-null only when the loop stopped because it hit `maxPages` without
+  // shouldFetchNextInitialPage ever returning false — i.e. Today+Yesterday
+  // were NOT confirmed fully covered. Real daily volume is nowhere near this
+  // many pages (see App.tsx's MAX_INITIAL_PAGES comment); the caller logs
+  // this rather than silently pretending coverage was complete.
+  cappedAt: number | null;
+}
+
+// Task 49: the "keep fetching until Today+Yesterday are covered" loop,
+// extracted as pure logic decoupled from React state and the real network
+// call — a test against this function is a genuine regression lock for
+// App.tsx's initial-load effect, not a reimplementation that can drift from
+// it. `onPage` fires after each page is folded into the running total (so
+// callers can render progressively, matching the original inline-loop
+// behavior); `isCancelled` is checked right after each fetch resolves so an
+// aborted effect (e.g. the user changed filters mid-load) stops requesting
+// further pages instead of continuing in the background.
+export async function fetchInitialPages<T extends { added_at: string }>(
+  fetchPage: (cursor: string | undefined) => Promise<PaginatedPage<T>>,
+  maxPages: number,
+  options: {
+    onPage?: (accumulated: T[], nextCursor: string | null) => void;
+    isCancelled?: () => boolean;
+    now?: Date;
+  } = {},
+): Promise<FetchInitialPagesResult<T>> {
+  const { onPage, isCancelled, now = new Date() } = options;
+  let cursor: string | undefined;
+  let accumulated: T[] = [];
+  let nextCursor: string | null = null;
+
+  for (let page = 0; page < maxPages; page++) {
+    const res = await fetchPage(cursor);
+    if (isCancelled?.()) return { items: accumulated, nextCursor, cappedAt: null };
+
+    accumulated = accumulated.concat(res.items);
+    nextCursor = res.next_cursor;
+    onPage?.(accumulated, nextCursor);
+
+    if (!shouldFetchNextInitialPage(res.items, res.next_cursor, now)) {
+      return { items: accumulated, nextCursor, cappedAt: null };
+    }
+    if (page === maxPages - 1) {
+      return { items: accumulated, nextCursor, cappedAt: maxPages };
+    }
+    cursor = res.next_cursor ?? undefined;
+  }
+  return { items: accumulated, nextCursor, cappedAt: maxPages };
+}
