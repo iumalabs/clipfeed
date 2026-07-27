@@ -194,3 +194,93 @@ Deno.test("access middleware: invalid token -> 401 unauthorized on /api/admin/*"
   const body = await res.json();
   assertEquals(body.error, "unauthorized");
 });
+
+// --- Task 50: E2E_TEST_MODE bypass — must be provably inert unless BOTH
+// gating conditions hold. Every test below omits ACCESS_TEAM_DOMAIN/
+// ACCESS_AUD entirely, so any successful bypass is unambiguous: the only way
+// /api/admin/me can return 200 here is via the test bypass, never real Access
+// verification (which would 401 with auth_not_configured regardless).
+
+const E2E_HEADER = "X-E2E-Test-Owner";
+const E2E_HEADER_VALUE = "clipfeed-e2e";
+
+Deno.test("E2E_TEST_MODE bypass: unset entirely (default/production shape) -> inert, still 401", async () => {
+  const env = makeEnv();
+  const res = await app.request(
+    "/api/admin/me",
+    { headers: { [E2E_HEADER]: E2E_HEADER_VALUE } },
+    env,
+    makeExecutionContext(),
+  );
+  assertEquals(res.status, 401);
+  const body = await res.json();
+  assertEquals(body.error, "auth_not_configured");
+});
+
+Deno.test("E2E_TEST_MODE bypass: flag true but header absent -> inert, still 401", async () => {
+  const env = makeEnv({ E2E_TEST_MODE: "true" });
+  const res = await app.request("/api/admin/me", {}, env, makeExecutionContext());
+  assertEquals(res.status, 401);
+  const body = await res.json();
+  assertEquals(body.error, "auth_not_configured");
+});
+
+Deno.test("E2E_TEST_MODE bypass: header present but flag unset -> inert, still 401", async () => {
+  const env = makeEnv();
+  const res = await app.request(
+    "/api/admin/me",
+    { headers: { [E2E_HEADER]: E2E_HEADER_VALUE } },
+    env,
+    makeExecutionContext(),
+  );
+  assertEquals(res.status, 401);
+});
+
+Deno.test("E2E_TEST_MODE bypass: header sends the wrong value -> inert, still 401", async () => {
+  const env = makeEnv({ E2E_TEST_MODE: "true" });
+  const res = await app.request(
+    "/api/admin/me",
+    { headers: { [E2E_HEADER]: "wrong-value" } },
+    env,
+    makeExecutionContext(),
+  );
+  assertEquals(res.status, 401);
+});
+
+Deno.test("E2E_TEST_MODE bypass: only loosely-truthy values ('1', 'TRUE', 'yes') never bypass — must be the exact string 'true'", async () => {
+  for (const looseValue of ["1", "TRUE", "yes", "True", " true", "true "]) {
+    const env = makeEnv({ E2E_TEST_MODE: looseValue });
+    const res = await app.request(
+      "/api/admin/me",
+      { headers: { [E2E_HEADER]: E2E_HEADER_VALUE } },
+      env,
+      makeExecutionContext(),
+    );
+    assertEquals(res.status, 401, `E2E_TEST_MODE=${JSON.stringify(looseValue)} must not bypass`);
+  }
+});
+
+Deno.test("E2E_TEST_MODE bypass: both conditions exactly satisfied -> authenticates as the fake owner", async () => {
+  const env = makeEnv({ E2E_TEST_MODE: "true" });
+  const res = await app.request(
+    "/api/admin/me",
+    { headers: { [E2E_HEADER]: E2E_HEADER_VALUE } },
+    env,
+    makeExecutionContext(),
+  );
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.sub, "e2e-test-owner");
+  assertEquals(body.email, "e2e-test-owner@localhost");
+});
+
+Deno.test("E2E_TEST_MODE bypass: even when Access IS also fully configured, the bypass still requires its own header (no cross-wiring)", async () => {
+  const { env: configuredEnv } = await makeConfiguredEnv();
+  const env = { ...configuredEnv, E2E_TEST_MODE: "true" };
+  const res = await app.request("/api/admin/me", {}, env, makeExecutionContext());
+  // No test header and no real Access token -> falls through to real
+  // (configured) Access verification, which 401s on a missing token.
+  assertEquals(res.status, 401);
+  const body = await res.json();
+  assertEquals(body.error, "unauthorized");
+});

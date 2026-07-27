@@ -328,7 +328,7 @@ export function ArticleCard(props: ArticleCardProps) {
       reducedMotion,
     );
     return (
-      <article class="card card--skeleton">
+      <article class="card card--skeleton" data-article-id={article.id}>
         <div class="card-date">{formatDate(article.added_at, lang)}</div>
         <div class={shimmerClass} aria-hidden="true">
           <div class="skeleton-line skeleton-line--title" />
@@ -383,7 +383,7 @@ export function ArticleCard(props: ArticleCardProps) {
       ? articleErrorText(article.error, dict)
       : visitorFailureText(article.fail_class, dict);
     return (
-      <article class="card card--failed">
+      <article class="card card--failed" data-article-id={article.id}>
         <div class="card-date">{formatDate(article.added_at, lang)}</div>
         <h3 class="card-title">{article.title}</h3>
         <p class="error-text">{message}</p>
@@ -420,7 +420,7 @@ export function ArticleCard(props: ArticleCardProps) {
       reducedMotion,
     );
     return (
-      <article class="card card--skeleton">
+      <article class="card card--skeleton" data-article-id={article.id}>
         <div class="card-date">{formatDate(article.added_at, lang)}</div>
         <div class={shimmerClass} aria-hidden="true">
           <div class="skeleton-line skeleton-line--title" />
@@ -455,7 +455,12 @@ export function ArticleCard(props: ArticleCardProps) {
   const faithfulnessDetailCounts = faithfulnessCounts(article.faithfulness_json);
 
   return (
-    <article class={cardClass} aria-expanded={expanded} ref={cardRef}>
+    <article
+      class={cardClass}
+      aria-expanded={expanded}
+      ref={cardRef}
+      data-article-id={article.id}
+    >
       {(isPickOfDay || badgeInfo) && (
         <div class="card-badges-row">
           {isPickOfDay && <span class="pick-chip">{dict.pickOfDay}</span>}
