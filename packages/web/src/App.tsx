@@ -29,7 +29,7 @@ import {
   type SectionOpenState,
   writeStoredSectionState,
 } from "./lib/sectionState.ts";
-import { shouldFetchNextInitialPage, shouldFetchOnEarlierExpand } from "./lib/pagination.ts";
+import { fetchInitialPages, shouldFetchOnEarlierExpand } from "./lib/pagination.ts";
 import { loadAgentSchedule } from "./lib/agentSchedule.ts";
 import { loadRepoUrl } from "./lib/repoConfig.ts";
 import { classifyApiError, localizedErrorMessage } from "./lib/errorMessages.ts";
@@ -305,23 +305,36 @@ export function App() {
     }
 
     (async () => {
-      let cursor: string | undefined;
-      let accumulated: ArticleListItem[] = [];
-      for (let page = 0; page < MAX_INITIAL_PAGES; page++) {
-        const res = await fetchArticleList(isOwner, {
-          limit: PAGE_LIMIT,
-          cursor,
-          tag: activeTag ?? undefined,
-          source: activeSource ?? undefined,
-          q: query || undefined,
-          archived: archivedView,
-        });
-        if (cancelled) return;
-        accumulated = accumulated.concat(res.items);
-        setArticles(accumulated);
-        setNextCursor(res.next_cursor);
-        if (!shouldFetchNextInitialPage(res.items, res.next_cursor)) break;
-        cursor = res.next_cursor ?? undefined;
+      const result = await fetchInitialPages(
+        (cursor) =>
+          fetchArticleList(isOwner, {
+            limit: PAGE_LIMIT,
+            cursor,
+            tag: activeTag ?? undefined,
+            source: activeSource ?? undefined,
+            q: query || undefined,
+            archived: archivedView,
+          }),
+        MAX_INITIAL_PAGES,
+        {
+          onPage: (accumulated, nextCursor) => {
+            setArticles(accumulated);
+            setNextCursor(nextCursor);
+          },
+          isCancelled: () => cancelled,
+        },
+      );
+      // Today+Yesterday were NOT confirmed fully covered within the safety
+      // cap — real daily volume is nowhere near this many pages (see
+      // MAX_INITIAL_PAGES above), so this only ever fires against a
+      // pathological/misconfigured dataset. Never blocks the UI: whatever
+      // was loaded still renders, same as reaching the cap silently would.
+      if (result.cappedAt !== null) {
+        console.warn(JSON.stringify({
+          event: "initial_load_page_cap_reached",
+          pages: result.cappedAt,
+          loaded: result.items.length,
+        }));
       }
     })()
       .catch((err) => {

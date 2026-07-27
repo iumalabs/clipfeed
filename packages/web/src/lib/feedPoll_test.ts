@@ -105,15 +105,39 @@ Deno.test("applyFeedPollSnapshot: a pending row absent from the snapshot (e.g. b
   assertEquals(result[0].status, "pending");
 });
 
-Deno.test("applyFeedPollSnapshot: never inserts a snapshot row that isn't already in `current`", () => {
+// Task 49: a snapshot row with no match in `current` is a genuinely new
+// arrival (the poll always fetches the unfiltered newest-first first page —
+// see App.tsx) and gets prepended, rather than silently dropped.
+Deno.test("applyFeedPollSnapshot: a snapshot row not already in `current` is prepended as a new arrival", () => {
   const current = [article({ id: "a1", status: "pending" })];
   const snapshot = [
+    article({ id: "a2", status: "ready", title: "Brand new" }),
     article({ id: "a1", status: "pending" }),
-    article({ id: "a2", status: "ready" }),
   ];
   const result = applyFeedPollSnapshot(current, snapshot);
-  assertEquals(result.length, 1);
-  assertEquals(result.map((a) => a.id), ["a1"]);
+  assertEquals(result.map((a) => a.id), ["a2", "a1"]);
+  assertEquals(result[0].title, "Brand new");
+});
+
+Deno.test("applyFeedPollSnapshot: multiple new arrivals are prepended in the snapshot's own (newest-first) order", () => {
+  const current = [article({ id: "a1", status: "ready" })];
+  const snapshot = [
+    article({ id: "a3", status: "ready" }),
+    article({ id: "a2", status: "ready" }),
+    article({ id: "a1", status: "ready" }),
+  ];
+  const result = applyFeedPollSnapshot(current, snapshot);
+  assertEquals(result.map((a) => a.id), ["a3", "a2", "a1"]);
+});
+
+Deno.test("applyFeedPollSnapshot: no new arrivals means the list is returned unchanged in length and order", () => {
+  const current = [
+    article({ id: "a1", status: "ready" }),
+    article({ id: "a2", status: "ready" }),
+  ];
+  const snapshot = [article({ id: "a1", status: "ready" }), article({ id: "a2", status: "ready" })];
+  const result = applyFeedPollSnapshot(current, snapshot);
+  assertEquals(result.map((a) => a.id), ["a1", "a2"]);
 });
 
 Deno.test("applyFeedPollSnapshot: updates every pending row regardless of how many there are, from one snapshot", () => {
@@ -129,4 +153,53 @@ Deno.test("applyFeedPollSnapshot: updates every pending row regardless of how ma
   ];
   const result = applyFeedPollSnapshot(current, snapshot);
   assertEquals(result.map((a) => a.status), ["ready", "failed", "pending"]);
+});
+
+// --- Task 49 regression coverage ---
+
+Deno.test("applyFeedPollSnapshot: items appended by 'Показать ещё' (show more) survive a subsequent poll tick untouched", () => {
+  // Simulates the real sequence: initial load produced 2 items, the user
+  // clicked "show more" and 2 more (older, already-ready) items were
+  // appended locally (handleShowMore's `[...current, ...res.items]`) — a
+  // poll snapshot covering only the newest page must never drop the
+  // show-more items just because they're absent from that snapshot.
+  const afterShowMore = [
+    article({ id: "p1", status: "pending" }),
+    article({ id: "r1", status: "ready" }),
+    article({ id: "older1", status: "ready", title: "Loaded via show more" }),
+    article({ id: "older2", status: "ready", title: "Loaded via show more" }),
+  ];
+  const pollSnapshot = [
+    article({ id: "p1", status: "ready", title: "Now ready" }),
+    article({ id: "r1", status: "ready" }),
+  ];
+  const result = applyFeedPollSnapshot(afterShowMore, pollSnapshot);
+  assertEquals(result.map((a) => a.id), ["p1", "r1", "older1", "older2"]);
+  assertEquals(result[0].title, "Now ready");
+  assertEquals(result[2].title, "Loaded via show more");
+  assertEquals(result[3].title, "Loaded via show more");
+});
+
+// Regression test for Task 49's "feed shows only one page" incident: a poll
+// snapshot (always just the first/newest page — see App.tsx) must never
+// shrink an accumulated list that's already grown past a single page via
+// the initial multi-page load and/or "show more" — the exact failure mode
+// reported (feed showed ~11 while the database held 97).
+Deno.test("applyFeedPollSnapshot: Task 49 regression — a first-page snapshot never truncates a much longer accumulated list", () => {
+  const longAccumulated = Array.from({ length: 60 }, (_, i) =>
+    article({
+      id: `article-${i}`,
+      status: i === 0 ? "pending" : "ready",
+      title: `Article ${i}`,
+    }));
+  // The poll only ever fetches PAGE_LIMIT (20) newest items — far fewer
+  // than the 60 already accumulated across multiple pages.
+  const firstPageSnapshot = longAccumulated.slice(0, 20).map((a) =>
+    a.id === "article-0" ? { ...a, status: "ready" as const, title: "Article 0 (done)" } : a
+  );
+  const result = applyFeedPollSnapshot(longAccumulated, firstPageSnapshot);
+  assertEquals(result.length, 60);
+  assertEquals(result.map((a) => a.id), longAccumulated.map((a) => a.id));
+  assertEquals(result[0].status, "ready");
+  assertEquals(result[0].title, "Article 0 (done)");
 });
