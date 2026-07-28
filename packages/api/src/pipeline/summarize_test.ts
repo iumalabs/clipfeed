@@ -5,6 +5,7 @@ import {
   buildEnglishSystemPrompt,
   buildSystemPrompt,
   callLlm,
+  DEFAULT_MIN_EXTRACTED_CHARS,
   DEFAULT_RELAXED_SPEC,
   DEFAULT_STRICT_SPEC,
   DEFAULT_SUMMARY_BODY_TARGET_CHARS,
@@ -13,6 +14,7 @@ import {
   generateEnglishFields,
   MAX_TRUNCATION_RETRY_TOKENS,
   parseEnglishJsonWithDiagnostics,
+  parseMinExtractedChars,
   parseSummaryBodyTargetChars,
   parseSummaryJson,
   parseSummaryJsonWithDiagnostics,
@@ -2436,6 +2438,39 @@ Deno.test("parseSummaryBodyTargetChars: non-numeric, below-min, and above-max al
 Deno.test("parseSummaryBodyTargetChars: the boundary values 400 and 4000 are both accepted", () => {
   assertEquals(parseSummaryBodyTargetChars("400"), 400);
   assertEquals(parseSummaryBodyTargetChars("4000"), 4000);
+});
+
+// --- parseMinExtractedChars: defensive [vars] parsing (Task 58) ---
+
+Deno.test("parseMinExtractedChars: undefined/empty falls back to the default, no warning", () => {
+  const { result: undef, warnings: w1 } = withCapturedWarnings(() =>
+    parseMinExtractedChars(undefined)
+  );
+  assertEquals(undef, DEFAULT_MIN_EXTRACTED_CHARS);
+  assertEquals(w1.length, 0);
+
+  const { result: empty, warnings: w2 } = withCapturedWarnings(() => parseMinExtractedChars("  "));
+  assertEquals(empty, DEFAULT_MIN_EXTRACTED_CHARS);
+  assertEquals(w2.length, 0);
+});
+
+Deno.test("parseMinExtractedChars: a valid in-range value is used as-is, no warning", () => {
+  const { result, warnings } = withCapturedWarnings(() => parseMinExtractedChars("500"));
+  assertEquals(result, 500);
+  assertEquals(warnings.length, 0);
+});
+
+Deno.test("parseMinExtractedChars: non-numeric, below-min, and above-max all fall back WITH a warning", () => {
+  for (const bad of ["not a number", "99", "2001", "-100"]) {
+    const { result, warnings } = withCapturedWarnings(() => parseMinExtractedChars(bad));
+    assertEquals(result, DEFAULT_MIN_EXTRACTED_CHARS, bad);
+    assertEquals(warnings.length, 1, bad);
+  }
+});
+
+Deno.test("parseMinExtractedChars: the boundary values 100 and 2000 are both accepted", () => {
+  assertEquals(parseMinExtractedChars("100"), 100);
+  assertEquals(parseMinExtractedChars("2000"), 2000);
 });
 
 // --- Task 35 Part A §3: lazy English generation (generateEnglishFields,

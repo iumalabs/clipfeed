@@ -76,6 +76,16 @@ AGENT_DAILY_PICKS = "10"
 # breaking. See README "Summary length".
 SUMMARY_BODY_TARGET_CHARS = "800"
 
+# Task 58: below this many extracted chars, the pipeline refuses to
+# summarize (fails fast with "extraction: insufficient text (N chars)"
+# instead of feeding an LLM nothing to work with — see pipeline.ts). String,
+# not a number, so a bad override (missing, non-numeric, outside
+# [100, 2000]) degrades to the 300 default. 300 is not a guess: a 100-article
+# sample of this instance's real stored full_text lengths found zero below
+# it, and the single shortest real article (330 chars) was a legitimate,
+# fully-extracted short-form quote.
+MIN_EXTRACTED_CHARS = "300"
+
 # Faithfulness check (see packages/api/src/pipeline/faithfulness.ts, README
 # "Faithfulness check"): a SEPARATE judge pass, always Workers AI Llama
 # regardless of which model wrote the summary, that verifies a summary

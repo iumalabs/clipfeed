@@ -153,6 +153,38 @@ export function parseSummaryBodyTargetChars(raw: string | undefined): number {
   return Math.round(n);
 }
 
+// Task 58: below this, there's nothing substantive to summarize — seen in
+// practice on link-post pages (a Twitter/X mirror like xcancel.com/nitter, a
+// bare redirect page, a JS-only SPA shell) where Readability's fallback to
+// raw body text still yields only nav/footer boilerplate. 300 is not a
+// guess: a 100-article sample of this instance's real stored full_text
+// lengths (added 2026-07-28, see Task 58's investigation) found ZERO
+// articles below 300 chars, and the single shortest real article (330
+// chars) was a legitimate, fully-extracted short-form quote — proof the
+// floor already sits below genuine short-but-valid content, so raising the
+// default isn't supported by evidence. Configurable per-fork/per-operator
+// via [vars] MIN_EXTRACTED_CHARS (same string-env-var pattern as
+// SUMMARY_BODY_TARGET_CHARS above) since a different content mix could
+// warrant a different value.
+export const DEFAULT_MIN_EXTRACTED_CHARS = 300;
+const MIN_MIN_EXTRACTED_CHARS = 100;
+const MAX_MIN_EXTRACTED_CHARS = 2000;
+
+export function parseMinExtractedChars(raw: string | undefined): number {
+  const trimmed = (raw ?? "").trim();
+  if (trimmed === "") return DEFAULT_MIN_EXTRACTED_CHARS;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n < MIN_MIN_EXTRACTED_CHARS || n > MAX_MIN_EXTRACTED_CHARS) {
+    console.warn(JSON.stringify({
+      event: "min_extracted_chars_invalid",
+      raw: trimmed,
+      fallback: DEFAULT_MIN_EXTRACTED_CHARS,
+    }));
+    return DEFAULT_MIN_EXTRACTED_CHARS;
+  }
+  return Math.round(n);
+}
+
 // A very short target still needs a paragraph that reads as a real
 // paragraph, not a stub — this floor can end up above the "aim for" band's
 // low end at the smallest allowed targets (see deriveSummarySpec's doc

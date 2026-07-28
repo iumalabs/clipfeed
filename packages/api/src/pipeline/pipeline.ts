@@ -5,6 +5,7 @@ import { extractArticle } from "./extract.ts";
 import {
   deriveSummarySpec,
   generateEnglishFields,
+  parseMinExtractedChars,
   parseSummaryBodyTargetChars,
   type PriorViolationsKind,
   renderSummaryMarkdown,
@@ -191,16 +192,6 @@ export async function runSummarization(
 // ctx.waitUntil()) absorbs the resulting latency, see this task's latency
 // measurement note.
 const MAX_TEXT_CHARS_WORKERS_AI = 24_000;
-
-// Below this, there's nothing substantive to summarize — seen in practice on
-// link-post pages (a Twitter/X mirror like xcancel.com/nitter, a bare
-// redirect page, a JS-only SPA shell) where Readability's fallback to raw
-// body text still yields only nav/footer boilerplate. Sending that to the
-// LLM anyway produces either a fabricated summary (faithfulness violation)
-// or an opaque downstream failure; failing fast here instead gives a human
-// a clear, actionable reason (as opposed to a validation error whose real
-// cause — "there was nothing here" — is buried a level down).
-const MIN_EXTRACTED_TEXT_CHARS = 300;
 
 function byteLength(s: string): number {
   return new TextEncoder().encode(s).length;
@@ -498,7 +489,8 @@ export async function runArticlePipeline(env: Env, input: PipelineInput): Promis
       text_chars: extracted.textContent.length,
     });
 
-    if (extracted.textContent.length < MIN_EXTRACTED_TEXT_CHARS) {
+    const minExtractedChars = parseMinExtractedChars(env.MIN_EXTRACTED_CHARS);
+    if (extracted.textContent.length < minExtractedChars) {
       const insufficientTextReason =
         `extraction: insufficient text (${extracted.textContent.length} chars)`;
       await markArticleFailed(env.DB, input.id, insufficientTextReason);

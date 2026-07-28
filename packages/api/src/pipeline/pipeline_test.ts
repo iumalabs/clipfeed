@@ -274,9 +274,9 @@ Deno.test("runSummarization: CF_AIG_TOKEN set alone (no URL) falls back to Worke
 
 // --- runArticlePipeline: terminal-state guarantee + input capping ---
 
-// Long enough that extraction clears pipeline.ts's MIN_EXTRACTED_TEXT_CHARS
-// (300) guard — a short 1-2 sentence fixture used to be enough before that
-// guard existed.
+// Long enough that extraction clears the pipeline's default MIN_EXTRACTED_CHARS
+// (300, see summarize.ts's parseMinExtractedChars) guard — a short 1-2
+// sentence fixture used to be enough before that guard existed.
 const ARTICLE_HTML = `<html><head><title>Example</title></head><body><article><h1>Example</h1>` +
   `<p>Hello world, this is the first paragraph of example content, with enough extra words to ` +
   `comfortably clear the minimum extraction length used by the pipeline's insufficient-text ` +
@@ -625,6 +625,121 @@ Deno.test("runArticlePipeline: extraction under 300 chars also records an auto-b
   });
 
   assertEquals(await cache.get("autostat:mirror.example"), "1");
+});
+
+// Task 58: MIN_EXTRACTED_CHARS is a configurable [vars] override (parsed by
+// summarize.ts's parseMinExtractedChars), not a hardcoded constant — this
+// article's extracted text is comfortably above the 300 default but below
+// a raised, operator-set floor, and the SAME html must pass when the
+// override is absent (default) and fail when it's set higher.
+const BORDERLINE_HTML =
+  `<html><head><title>Short Update</title></head><body><article><h1>Short Update</h1>` +
+  `<p>This short news item has just enough words to clear the pipeline's default insufficient-text ` +
+  `floor of three hundred characters, but a stricter operator-configured floor would still reject ` +
+  `it outright as too thin to summarize well for this particular fork's content mix. A second ` +
+  `sentence adds a little more detail so the total comfortably clears four hundred characters even ` +
+  `after Readability trims whitespace and any surrounding markup noise.</p>` +
+  `</article></body></html>`;
+
+Deno.test("runArticlePipeline: MIN_EXTRACTED_CHARS unset -> default 300 floor -> borderline article proceeds", async () => {
+  const db = new ControllableD1();
+  const env = makePipelineEnv({
+    DB: db as unknown as D1Database,
+    ANTHROPIC_API_KEY: undefined,
+    AI: {
+      run(): Promise<unknown> {
+        return Promise.resolve({ response: VALID_SUMMARY });
+      },
+    },
+  });
+
+  await runArticlePipeline(env, {
+    id: "p-borderline-default",
+    url: "https://example.com/short-update",
+    html: BORDERLINE_HTML,
+    requestTags: [],
+    addedVia: "manual",
+    alreadyEnforced: false,
+    source: null,
+    addedAt: "2026-01-01T00:00:00.000Z",
+  });
+
+  const row = db.rows.get("p-borderline-default");
+  assertEquals(row?.status, "ready");
+});
+
+Deno.test("runArticlePipeline: MIN_EXTRACTED_CHARS raised above the article's length -> fails with insufficient text", async () => {
+  const db = new ControllableD1();
+  let llmCalled = false;
+  const env = makePipelineEnv({
+    DB: db as unknown as D1Database,
+    MIN_EXTRACTED_CHARS: "500",
+    AI: {
+      run(): Promise<unknown> {
+        llmCalled = true;
+        throw new Error("LLM should not be called once the raised floor rejects this article");
+      },
+    },
+  });
+
+  await runArticlePipeline(env, {
+    id: "p-borderline-raised",
+    url: "https://example.com/short-update-2",
+    html: BORDERLINE_HTML,
+    requestTags: [],
+    addedVia: "manual",
+    alreadyEnforced: false,
+    source: null,
+    addedAt: "2026-01-01T00:00:00.000Z",
+  });
+
+  const row = db.rows.get("p-borderline-raised");
+  assertEquals(row?.status, "failed");
+  assert((row?.error as string).startsWith("extraction: insufficient text ("));
+  assertEquals(llmCalled, false);
+});
+
+// Task 58 Part A's investigation traced every summarization call site
+// (runSummarizationForMode, summarize.ts's deriveSummarySpec/buildSystemPrompt)
+// and found none take addedVia as an argument — only `mode` (provider
+// config) selects the validation profile and prompt. This test proves it
+// end-to-end: the exact same article, run through the exact same pipeline
+// twice with only addedVia flipped between "manual" and "agent", must
+// produce a byte-identical outgoing LLM request body (system prompt + user
+// message + model + max_tokens) both times.
+Deno.test("runArticlePipeline: manual and agent addedVia produce byte-identical LLM request bodies for the same text", async () => {
+  const html = ARTICLE_HTML;
+  const capturedBodies: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) => {
+    capturedBodies.push(String(init?.body ?? ""));
+    return Promise.resolve(anthropicSuccessResponse());
+  }) as typeof fetch;
+
+  try {
+    for (const addedVia of ["manual", "agent"] as const) {
+      const db = new ControllableD1();
+      const env = makePipelineEnv({
+        DB: db as unknown as D1Database,
+        ANTHROPIC_API_KEY: "sk-direct",
+      });
+      await runArticlePipeline(env, {
+        id: `p-path-${addedVia}`,
+        url: "https://example.com/x",
+        html,
+        requestTags: [],
+        addedVia,
+        alreadyEnforced: false,
+        source: null,
+        addedAt: "2026-01-01T00:00:00.000Z",
+      });
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assertEquals(capturedBodies.length, 2);
+  assertEquals(capturedBodies[0], capturedBodies[1]);
 });
 
 // Task 33 §7.1: a 403/402 (paywall) fetch failure is the OTHER signal

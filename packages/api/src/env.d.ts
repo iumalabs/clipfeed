@@ -189,6 +189,13 @@ declare global {
     // summarize.ts's deriveSummarySpec), so there's no separate "prompt
     // number" and "validator number" to keep in sync.
     SUMMARY_BODY_TARGET_CHARS: string;
+    // Task 58: [vars], parsed defensively by summarize.ts's
+    // parseMinExtractedChars — a missing/non-numeric/out-of-[100,2000]-range
+    // value falls back to the 300 default. Below this many extracted chars,
+    // runArticlePipeline refuses to summarize (fails the article with
+    // "extraction: insufficient text (N chars)" instead of feeding an LLM
+    // nothing to work with) — see pipeline.ts.
+    MIN_EXTRACTED_CHARS?: string;
     // Cloudflare Access protection: optional, var or secret. Auth middleware
     // activates only when BOTH are set (trimmed non-empty) — otherwise the
     // Worker serves openly (fork/dev bootstrap mode).

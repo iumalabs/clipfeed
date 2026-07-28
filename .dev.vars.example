@@ -32,6 +32,12 @@
 # length".
 # SUMMARY_BODY_TARGET_CHARS=800
 
+# Below this many extracted chars, the pipeline refuses to summarize
+# (fails fast with "extraction: insufficient text (N chars)" instead of
+# producing a hollow summary from a near-empty page). Valid range
+# 100-2000; anything missing/invalid/out of range falls back to 300.
+# MIN_EXTRACTED_CHARS=300
+
 # Faithfulness check (see README "Faithfulness check"): a SEPARATE judge
 # pass, always Workers AI Llama regardless of which model wrote the
 # summary, that verifies a summary against its source before the article

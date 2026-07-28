@@ -1089,6 +1089,18 @@ instead — this older counter stays read-only (still consulted, still respected
 transition, and its entries age out naturally via their existing 30-day TTL; nothing writes a fresh
 `thinhost:` key anymore.
 
+The `'extraction: insufficient text'` floor itself is `MIN_EXTRACTED_CHARS` ([vars] in
+`wrangler.toml`, default `300`, valid range `100`–`2000`) — below this many characters of extracted
+`textContent`, `runArticlePipeline` refuses to summarize at all rather than send a near-empty page
+to the LLM (which otherwise produces either a fabricated/hollow summary or an opaque downstream
+failure). 300 isn't an arbitrary number: a 100-article sample of this instance's own stored
+`full_text` lengths found zero articles below it, and the single shortest real article (330 chars)
+was a legitimate, fully-extracted short-form quote — so the default already sits below genuine
+short-but-valid content for this instance's source mix. A different fork with a different mix of
+sources may want a different value; raise it only with evidence (a real distribution check) that
+genuinely-thin extractions are slipping through, since raising it blindly risks rejecting short
+bulletins/quotes as false positives.
+
 A candidate whose **title** starts with a known paywall marker is dropped the same way, before any
 fetch is attempted — LWN prefixes subscriber-only article titles with `"[$]"` in its own RSS feed,
 so this is a free, no-network signal (see `agent-pool.ts`'s `PAYWALL_TITLE_MARKERS`, an extendable
