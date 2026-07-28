@@ -31,3 +31,20 @@ export async function loadTelegramChannelUrl(): Promise<string | null> {
   const body = await loadRawConfig();
   return isValidTelegramChannelUrl(body.telegram_channel_url) ? body.telegram_channel_url! : null;
 }
+
+// Task 57: the canonical https://t.me/<name> link triggers Telegram's app
+// handoff — on iOS/WebKit browsers this is the `apple-itunes-app` Smart App
+// Banner meta tag plus a "View in Telegram" tg://resolve button, both
+// confirmed present on the plain page and both ABSENT on https://t.me/s/<name>
+// (the same channel rendered as a plain scrollable web page, with only inert
+// Open Graph/Twitter "App Links" meta properties that ordinary browsers never
+// act on). Browsers that refuse the tg:// scheme (e.g. Brave on iOS) show a
+// dead-end "Cannot Open Page" dialog on the plain link — this derives the
+// /s/ form as a second, explicit path that never attempts the handoff.
+// Derives from the same validated telegramChannelUrl as the primary link, so
+// an invalid/unset config hides both (see isValidTelegramChannelUrl above).
+export function deriveTelegramWebPreviewUrl(url: string | null | undefined): string | null {
+  if (!isValidTelegramChannelUrl(url)) return null;
+  const name = new URL(url!).pathname.split("/").filter(Boolean)[0];
+  return name ? `https://t.me/s/${name}` : null;
+}

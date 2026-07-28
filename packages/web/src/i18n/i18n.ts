@@ -27,6 +27,7 @@ export interface Dictionary {
   telegramBannerText: string;
   telegramBannerButton: string;
   telegramBannerAria: string;
+  telegramBannerWebFallback: string;
   showMore: string;
   sectionToday: string;
   sectionYesterday: string;
@@ -159,6 +160,7 @@ const ru: Dictionary = {
   telegramBannerText: "Свежие выжимки в Telegram",
   telegramBannerButton: "Подписаться",
   telegramBannerAria: "Подписаться на канал в Telegram",
+  telegramBannerWebFallback: "открыть в браузере",
   showMore: "Показать ещё",
   sectionToday: "Сегодня",
   sectionYesterday: "Вчера",
@@ -293,6 +295,7 @@ const en: Dictionary = {
   telegramBannerText: "Fresh summaries on Telegram",
   telegramBannerButton: "Subscribe",
   telegramBannerAria: "Subscribe to the Telegram channel",
+  telegramBannerWebFallback: "open in browser",
   showMore: "Show more",
   sectionToday: "Today",
   sectionYesterday: "Yesterday",
