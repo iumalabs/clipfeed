@@ -1,0 +1,33 @@
+name: Release extension
+
+# Separate from ci.yml on purpose: this only runs on a tag push, never on a
+# PR or a push to main, so it can't add latency or flakiness to the existing
+# blocking `check` job.
+on:
+  push:
+    tags:
+      - "extension-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.9.1"
+
+      - name: Build + zip extension
+        run: deno task package:extension
+
+      - name: Attach dist/extension.zip to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/extension.zip
+          generate_release_notes: true

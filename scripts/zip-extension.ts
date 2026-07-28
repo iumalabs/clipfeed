@@ -148,9 +148,9 @@ async function main(): Promise<void> {
 
   const zip = await buildZip(entries);
   await Deno.mkdir("dist", { recursive: true });
-  await Deno.writeFile("dist/clipfeed-extension.zip", zip);
+  await Deno.writeFile("dist/extension.zip", zip);
   console.log(
-    `Wrote dist/clipfeed-extension.zip (${zip.length} bytes, ${entries.length} files)`,
+    `Wrote dist/extension.zip (${zip.length} bytes, ${entries.length} files)`,
   );
 }
 

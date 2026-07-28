@@ -1637,7 +1637,8 @@ a Service Token (see "Protecting your instance" → policy 2 above).
 
 ```
 deno task build:extension   # bundles packages/extension/ -> dist/extension/ (also runs as part of `deno task build`)
-deno task zip:extension     # zips dist/extension/ -> dist/clipfeed-extension.zip (Chrome Web Store upload artifact)
+deno task zip:extension     # zips dist/extension/ -> dist/extension.zip (whatever's already in dist/extension/)
+deno task package:extension # build:extension + zip:extension in one step -> dist/extension.zip (Chrome Web Store upload artifact)
 ```
 
 `dist/extension/` is a complete unpacked extension: `manifest.json`, `background.js` (service
@@ -1668,9 +1669,9 @@ revoke and reissue the Service Token in Zero Trust (Access → Service Auth) rat
 No Chrome/Chromium binary was available in the environment this extension was built in, so "Load
 unpacked" could not be exercised directly — verification here was `deno task test` (pure
 capture/payload/tag/auth-header logic, 21 tests) plus inspecting the built `dist/extension/` and
-`dist/clipfeed-extension.zip` output (valid PNG icons, no source maps, manifest paths resolve, zip
-opens with a standard `unzip`). **Owner checklist** to run once after loading the unpacked build or
-the store zip:
+`dist/extension.zip` output (valid PNG icons, no source maps, manifest paths resolve, zip opens with
+a standard `unzip`). **Owner checklist** to run once after loading the unpacked build or the store
+zip:
 
 - [ ] Toolbar icon opens the popup; before configuring, it shows "ClipFeed is not configured yet" +
       an "Open settings" button (not a broken/blank popup).
@@ -1696,3 +1697,13 @@ the store zip:
       "Protecting your instance".)
 - [ ] `chrome://extensions` service worker inspector shows no `html` payload or credential values
       logged to the console during a save (only status/category per the security constraints).
+
+### Publish to the Chrome Web Store
+
+`deno task package:extension` produces the store-ready `dist/extension.zip`. The listing copy
+(short/detailed descriptions, privacy-practices answers, screenshot guidance, single purpose
+statement) lives in [`packages/extension/STORE_LISTING.md`](packages/extension/STORE_LISTING.md);
+the manual submission steps (developer account, upload, visibility, review) live in
+[`packages/extension/PUBLISHING.md`](packages/extension/PUBLISHING.md). Both are meant to be copied
+straight into the Developer Dashboard — nothing about publishing is automated beyond the build/zip
+step, since account registration, payment, and review are Google-side manual actions.
