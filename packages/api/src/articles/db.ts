@@ -2,6 +2,7 @@ import "../env.d.ts";
 import type {
   AddedVia,
   Article,
+  ArticleCounts,
   ArticleListItem,
   ArticleStatus,
   FailureClass,
@@ -1044,16 +1045,19 @@ export function escapeLikeTerm(term: string): string {
   return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
-// Pure query builder, factored out so cursor pagination + filtering can be
-// unit tested without a real D1 binding.
-export function buildListQuery(params: ListArticlesParams): ListQuery {
+// Task 51: the tag/source/q/archived/status filter conditions, shared
+// between buildListQuery (the real list/pagination query) and
+// buildCountsQuery below (the counts-only companion — see
+// GET /api/articles/counts) — extracted so the two can never quietly drift
+// apart on what "the same filters" means. Deliberately excludes the cursor
+// condition: cursor is a pagination concern only, never part of "the active
+// filter context" a counts query needs to match.
+function buildFilterConditions(
+  params: Pick<ListArticlesParams, "tag" | "source" | "q" | "archived" | "status">,
+): { conditions: string[]; binds: unknown[] } {
   const conditions: string[] = [];
   const binds: unknown[] = [];
 
-  if (params.cursor) {
-    conditions.push("added_at < ?");
-    binds.push(params.cursor);
-  }
   if (params.tag) {
     conditions.push("tags LIKE ?");
     binds.push(`%"${params.tag}"%`);
@@ -1080,6 +1084,23 @@ export function buildListQuery(params: ListArticlesParams): ListQuery {
     binds.push(params.status);
   }
 
+  return { conditions, binds };
+}
+
+// Pure query builder, factored out so cursor pagination + filtering can be
+// unit tested without a real D1 binding.
+export function buildListQuery(params: ListArticlesParams): ListQuery {
+  const conditions: string[] = [];
+  const binds: unknown[] = [];
+
+  if (params.cursor) {
+    conditions.push("added_at < ?");
+    binds.push(params.cursor);
+  }
+  const filters = buildFilterConditions(params);
+  conditions.push(...filters.conditions);
+  binds.push(...filters.binds);
+
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   // Fetch one extra row to know whether a next page exists.
   const sql = [`SELECT ${LIST_COLUMNS} FROM articles`, where, "ORDER BY added_at DESC LIMIT ?"]
@@ -1104,6 +1125,65 @@ export async function listArticles(
     items: pageRows.map(rowToListItem),
     next_cursor: hasMore ? pageRows[pageRows.length - 1].added_at : null,
   };
+}
+
+// Task 51: params for the COUNT-only companion to listArticles — same
+// filter shape (minus cursor/limit, which are pagination concerns a counts
+// query has no use for), plus the two local-calendar-day boundaries the
+// caller computed CLIENT-SIDE (see packages/web/src/lib/dayBoundaries.ts).
+// D1 has no timezone concept, so bucketing here is deliberately just a
+// plain ISO-string comparison against boundaries the browser already
+// worked out in ITS OWN local time — the server never guesses at "today".
+export interface ArticleCountsParams {
+  tag?: string;
+  source?: string;
+  q?: string;
+  archived?: boolean;
+  status?: ArticleStatus;
+  todayStart: string;
+  yesterdayStart: string;
+}
+
+// Pure query builder — same reasoning as buildListQuery: unit-testable
+// without a real D1 binding. `added_at` is a zero-padded ISO 8601 string
+// (see markArticleReady/insertPendingArticle), so a plain `>=`/`<` string
+// comparison sorts identically to a real timestamp comparison — no date
+// parsing needed on the SQLite side at all.
+export function buildCountsQuery(params: ArticleCountsParams): ListQuery {
+  const { conditions, binds: filterBinds } = buildFilterConditions(params);
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const sql = [
+    "SELECT",
+    "SUM(CASE WHEN added_at >= ? THEN 1 ELSE 0 END) as today,",
+    "SUM(CASE WHEN added_at >= ? AND added_at < ? THEN 1 ELSE 0 END) as yesterday,",
+    "SUM(CASE WHEN added_at < ? THEN 1 ELSE 0 END) as earlier",
+    "FROM articles",
+    where,
+  ].filter(Boolean).join(" ");
+  const binds = [
+    params.todayStart,
+    params.yesterdayStart,
+    params.todayStart,
+    params.yesterdayStart,
+    ...filterBinds,
+  ];
+  return { sql, binds };
+}
+
+export async function getArticleCounts(
+  db: D1Database,
+  params: ArticleCountsParams,
+): Promise<ArticleCounts> {
+  const { sql, binds } = buildCountsQuery(params);
+  const row = await db.prepare(sql).bind(...binds).first<
+    { today: number | null; yesterday: number | null; earlier: number | null }
+  >();
+  // SUM() over zero matching rows returns SQL NULL (not 0) — an empty table,
+  // or every row excluded by the WHERE clause's own filters.
+  const today = row?.today ?? 0;
+  const yesterday = row?.yesterday ?? 0;
+  const earlier = row?.earlier ?? 0;
+  return { today, yesterday, earlier, total: today + yesterday + earlier };
 }
 
 export interface PatchArticleInput {

@@ -1,11 +1,13 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
 import {
   backfillNormalizedTags,
+  buildCountsQuery,
   buildListQuery,
   countUnembeddedArticles,
   escapeLikeTerm,
   findRecentTitles,
   findRecentTitlesForDedup,
+  getArticleCounts,
   getArticlesByIds,
   getFaithfulnessStats,
   insertPendingArticle,
@@ -164,6 +166,161 @@ Deno.test("buildListQuery: combines all filters with AND in a fixed order", () =
     "ready",
     6,
   ]);
+});
+
+// --- Task 51: buildCountsQuery / getArticleCounts — COUNT-only companion
+// to buildListQuery/listArticles, for the SPA's "Earlier" section header and
+// sidebar total. See GET /api/articles/counts. ---
+
+const BOUNDARIES = {
+  todayStart: "2026-01-03T00:00:00.000Z",
+  yesterdayStart: "2026-01-02T00:00:00.000Z",
+};
+
+Deno.test("buildCountsQuery: no filters — SUM(CASE WHEN...) shape, boundary binds first (today, yesterday, today, yesterday)", () => {
+  const { sql, binds } = buildCountsQuery(BOUNDARIES);
+  assertEquals(sql.includes("SUM(CASE WHEN added_at >= ? THEN 1 ELSE 0 END) as today"), true);
+  assertEquals(
+    sql.includes("SUM(CASE WHEN added_at >= ? AND added_at < ? THEN 1 ELSE 0 END) as yesterday"),
+    true,
+  );
+  assertEquals(sql.includes("SUM(CASE WHEN added_at < ? THEN 1 ELSE 0 END) as earlier"), true);
+  assertEquals(sql.includes("WHERE"), false);
+  assertEquals(binds, [
+    BOUNDARIES.todayStart,
+    BOUNDARIES.yesterdayStart,
+    BOUNDARIES.todayStart,
+    BOUNDARIES.yesterdayStart,
+  ]);
+});
+
+Deno.test("buildCountsQuery: filters use the exact same conditions/order as buildListQuery (minus cursor), appended after the boundary binds", () => {
+  const { sql, binds } = buildCountsQuery({
+    ...BOUNDARIES,
+    tag: "ai",
+    source: "example.com",
+    q: "widget",
+    archived: true,
+    status: "ready",
+  });
+  assertEquals(
+    sql.includes(
+      "WHERE tags LIKE ? AND source = ? AND " +
+        "(title LIKE ? ESCAPE '\\' OR summary_ru LIKE ? ESCAPE '\\' OR summary_en LIKE ? ESCAPE '\\') " +
+        "AND archived = ? AND status = ?",
+    ),
+    true,
+  );
+  assertEquals(binds, [
+    BOUNDARIES.todayStart,
+    BOUNDARIES.yesterdayStart,
+    BOUNDARIES.todayStart,
+    BOUNDARIES.yesterdayStart,
+    '%"ai"%',
+    "example.com",
+    "%widget%",
+    "%widget%",
+    "%widget%",
+    1,
+    "ready",
+  ]);
+});
+
+function rowAt(
+  id: string,
+  addedAt: string,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    id,
+    url: `https://example.com/${id}`,
+    title: id,
+    added_at: addedAt,
+    added_via: "manual",
+    status: "ready",
+    archived: 0,
+    heal_attempts: 0,
+    tags: "[]",
+    ...overrides,
+  };
+}
+
+Deno.test("getArticleCounts: buckets today/yesterday/earlier against the passed boundaries", async () => {
+  const db = new FakeD1();
+  db.rows.push(
+    rowAt("today1", "2026-01-03T10:00:00.000Z"),
+    rowAt("today2", "2026-01-03T23:59:59.000Z"),
+    rowAt("yest1", "2026-01-02T00:00:00.000Z"),
+    rowAt("yest2", "2026-01-02T23:59:59.999Z"),
+    rowAt("earlier1", "2026-01-01T23:59:59.999Z"),
+    rowAt("earlier2", "2025-12-25T00:00:00.000Z"),
+  );
+
+  const counts = await getArticleCounts(db, { ...BOUNDARIES, status: "ready" });
+  assertEquals(counts, { today: 2, yesterday: 2, earlier: 2, total: 6 });
+});
+
+Deno.test("getArticleCounts: an article exactly at the today-start boundary counts as today, not yesterday (midnight-boundary case)", async () => {
+  const db = new FakeD1();
+  db.rows.push(rowAt("midnight", BOUNDARIES.todayStart));
+
+  const counts = await getArticleCounts(db, { ...BOUNDARIES, status: "ready" });
+  assertEquals(counts, { today: 1, yesterday: 0, earlier: 0, total: 1 });
+});
+
+Deno.test("getArticleCounts: an article exactly at the yesterday-start boundary counts as yesterday, not earlier", async () => {
+  const db = new FakeD1();
+  db.rows.push(rowAt("boundary", BOUNDARIES.yesterdayStart));
+
+  const counts = await getArticleCounts(db, { ...BOUNDARIES, status: "ready" });
+  assertEquals(counts, { today: 0, yesterday: 1, earlier: 0, total: 1 });
+});
+
+Deno.test("getArticleCounts: an empty table (or a WHERE that excludes every row) returns all zeros, not NaN/null (SUM() over zero rows is SQL NULL)", async () => {
+  const db = new FakeD1();
+  const emptyTable = await getArticleCounts(db, { ...BOUNDARIES, status: "ready" });
+  assertEquals(emptyTable, { today: 0, yesterday: 0, earlier: 0, total: 0 });
+
+  db.rows.push(rowAt("only-pending", "2026-01-03T10:00:00.000Z", { status: "pending" }));
+  const excludedByFilter = await getArticleCounts(db, { ...BOUNDARIES, status: "ready" });
+  assertEquals(excludedByFilter, { today: 0, yesterday: 0, earlier: 0, total: 0 });
+});
+
+Deno.test("getArticleCounts: respects the same filters as listArticles (tag/source/q/archived/status) — filtered counts differ from unfiltered", async () => {
+  const db = new FakeD1();
+  db.rows.push(
+    rowAt("news1", "2026-01-03T10:00:00.000Z", { tags: '["news"]', source: "a.example" }),
+    rowAt("tech1", "2026-01-03T11:00:00.000Z", { tags: '["tech"]', source: "b.example" }),
+    rowAt("news2", "2026-01-02T10:00:00.000Z", { tags: '["news"]', source: "a.example" }),
+  );
+
+  const unfiltered = await getArticleCounts(db, { ...BOUNDARIES, status: "ready" });
+  assertEquals(unfiltered, { today: 2, yesterday: 1, earlier: 0, total: 3 });
+
+  const tagFiltered = await getArticleCounts(db, { ...BOUNDARIES, tag: "news", status: "ready" });
+  assertEquals(tagFiltered, { today: 1, yesterday: 1, earlier: 0, total: 2 });
+
+  const sourceFiltered = await getArticleCounts(db, {
+    ...BOUNDARIES,
+    source: "b.example",
+    status: "ready",
+  });
+  assertEquals(sourceFiltered, { today: 1, yesterday: 0, earlier: 0, total: 1 });
+});
+
+Deno.test("getArticleCounts: status omitted counts every status (owner's 'all' view); status='ready' matches only ready (visitor view)", async () => {
+  const db = new FakeD1();
+  db.rows.push(
+    rowAt("ready1", "2026-01-03T10:00:00.000Z", { status: "ready" }),
+    rowAt("pending1", "2026-01-03T10:00:00.000Z", { status: "pending" }),
+    rowAt("failed1", "2026-01-03T10:00:00.000Z", { status: "failed" }),
+  );
+
+  const ownerAll = await getArticleCounts(db, BOUNDARIES);
+  assertEquals(ownerAll, { today: 3, yesterday: 0, earlier: 0, total: 3 });
+
+  const visitorReady = await getArticleCounts(db, { ...BOUNDARIES, status: "ready" });
+  assertEquals(visitorReady, { today: 1, yesterday: 0, earlier: 0, total: 1 });
 });
 
 // --- Task 32: multi-word search — AND-of-terms semantics, byte-safe

@@ -6,6 +6,7 @@ import { scrollElementIntoView } from "../lib/scroll.ts";
 import { computeAgentBatchIndicator, computeTodayIsEmpty } from "../lib/agentBatch.ts";
 import { isFlatSemanticView, type SearchMode } from "../lib/searchMode.ts";
 import { hasActiveFilters } from "../lib/filterState.ts";
+import { resolveSectionCount } from "../lib/sectionCount.ts";
 import { ArticleCard } from "./ArticleCard.tsx";
 import { TodayEmptyState } from "./TodayEmptyState.tsx";
 import { AgentBatchIndicator } from "./AgentBatchIndicator.tsx";
@@ -56,6 +57,14 @@ export interface FeedProps {
   activeTag: string | null;
   activeSource: string | null;
   onResetFilters: () => void;
+  // Task 51: the server's true count for the "Earlier" bucket, honoring
+  // the same active filters as `articles` — null when the counts endpoint
+  // hasn't resolved yet (or failed), in which case the header falls back
+  // to the loaded-length computation below (the pre-Task-51 behavior).
+  // Today/Yesterday are unaffected: the initial-load loop already fetches
+  // them in full (see App.tsx), so their loaded-length count was never
+  // wrong the way Earlier's lazy-loaded one was.
+  earlierCount: number | null;
 }
 
 export function Feed(props: FeedProps) {
@@ -77,6 +86,7 @@ export function Feed(props: FeedProps) {
     activeTag,
     activeSource,
     onResetFilters,
+    earlierCount,
   } = props;
 
   // Any active tag/source filter OR a search query counts as "filtered" —
@@ -205,7 +215,8 @@ export function Feed(props: FeedProps) {
         // "12" when only 2 cards and a "0 of 10 ready" indicator are on
         // screen.
         const agentBatch = computeAgentBatchIndicator(items);
-        const visibleCount = items.length - (agentBatch.total - agentBatch.ready);
+        const localVisibleCount = items.length - (agentBatch.total - agentBatch.ready);
+        const visibleCount = resolveSectionCount(section, localVisibleCount, earlierCount);
 
         return (
           <div class="feed-section" key={section} id={`feed-section-${section}`}>

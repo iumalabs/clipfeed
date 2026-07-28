@@ -2,6 +2,7 @@ import type {
   AddedVia,
   AdminSearchResponse,
   Article,
+  ArticleCounts,
   ArticleListItem,
   ArticleListResponse,
   CreateArticleRequest,
@@ -11,6 +12,7 @@ import type {
   PublicArticleListResponse,
   SearchResponse,
 } from "@clipfeed/shared/types";
+import type { DayBoundaries } from "./lib/dayBoundaries.ts";
 
 export class ApiError extends Error {
   // `body` carries the full parsed JSON error response (when the response
@@ -86,6 +88,54 @@ export function listArticles(params: ArticlesQueryParams = {}): Promise<PublicAr
 // still excluded, same as GET /api/admin/articles/:id minus full_text).
 export function listAdminArticles(params: ArticlesQueryParams = {}): Promise<ArticleListResponse> {
   return request<ArticleListResponse>(buildArticlesUrl(params, "/api/admin/articles"));
+}
+
+export interface ArticleCountsParams {
+  tag?: string;
+  source?: string;
+  q?: string;
+  archived?: boolean;
+}
+
+// Pure, same reasoning as buildArticlesUrl above — unit-testable without a
+// fetch mock. `base` lets the owner-mode counts reuse it against
+// /api/admin/articles/counts (see getAdminArticleCounts below). Task 51: the
+// two boundaries are REQUIRED query params — see lib/dayBoundaries.ts for
+// why the client (not the server) computes them.
+export function buildCountsUrl(
+  boundaries: DayBoundaries,
+  params: ArticleCountsParams = {},
+  base = "/api/articles/counts",
+): string {
+  const search = new URLSearchParams({
+    today_start: boundaries.todayStart,
+    yesterday_start: boundaries.yesterdayStart,
+  });
+  if (params.tag) search.set("tag", params.tag);
+  if (params.source) search.set("source", params.source);
+  if (params.q) search.set("q", params.q);
+  if (params.archived !== undefined) search.set("archived", params.archived ? "1" : "0");
+  return `${base}?${search}`;
+}
+
+// Task 51: COUNT-only companion to listArticles — same filters, always
+// status='ready' server-side. Used for the SPA's lazy-loaded "Earlier"
+// section header and the sidebar total, so both show the TRUE total
+// without needing every row fetched.
+export function getArticleCounts(
+  boundaries: DayBoundaries,
+  params: ArticleCountsParams = {},
+): Promise<ArticleCounts> {
+  return request<ArticleCounts>(buildCountsUrl(boundaries, params));
+}
+
+// Owner-only equivalent — sees every status, same as listAdminArticles vs.
+// listArticles.
+export function getAdminArticleCounts(
+  boundaries: DayBoundaries,
+  params: ArticleCountsParams = {},
+): Promise<ArticleCounts> {
+  return request<ArticleCounts>(buildCountsUrl(boundaries, params, "/api/admin/articles/counts"));
 }
 
 // Pure, same reasoning as buildArticlesUrl above — unit-testable without a
