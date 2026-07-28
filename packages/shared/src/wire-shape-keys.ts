@@ -102,7 +102,7 @@ export const PUBLIC_ARTICLE_KEYS = keysOf<PublicArticle>()(
 );
 
 // A parsed `summary_json` column — every field the SPA's selectSummaryFields
-// (packages/web/src/lib/summaryFields.ts) reads, whether required or
+// (packages/web/src/lib/content/summaryFields.ts) reads, whether required or
 // (lazily-populated) optional.
 export const SUMMARY_JSON_KEYS = keysOf<SummaryJson>()(
   [

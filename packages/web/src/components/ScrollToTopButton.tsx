@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import type { Dictionary } from "../i18n.ts";
-import { usePrefersReducedMotion } from "../lib/motion.ts";
-import { isScrollToTopVisible, scrollToTopBehavior } from "../lib/scrollToTop.ts";
+import type { Dictionary } from "../i18n/i18n.ts";
+import { usePrefersReducedMotion } from "../lib/ui/motion.ts";
+import { isScrollToTopVisible, scrollToTopBehavior } from "../lib/ui/scrollToTop.ts";
 
 export interface ScrollToTopButtonProps {
   dict: Dictionary;

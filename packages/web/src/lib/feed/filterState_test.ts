@@ -5,7 +5,7 @@ import {
   type FilterState,
   hasActiveFilters,
 } from "./filterState.ts";
-import { buildArticlesUrl } from "../api.ts";
+import { buildArticlesUrl } from "../api/api.ts";
 
 function toUrl(state: FilterState): string {
   return buildArticlesUrl({

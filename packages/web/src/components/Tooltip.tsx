@@ -1,7 +1,7 @@
 import { cloneElement, type VNode } from "preact";
 import { useEffect, useId, useRef, useState } from "preact/hooks";
-import { nextTooltipOpen, type TooltipEvent } from "../lib/tooltip.ts";
-import { usePrefersReducedMotion, withMotionClass } from "../lib/motion.ts";
+import { nextTooltipOpen, type TooltipEvent } from "../lib/ui/tooltip.ts";
+import { usePrefersReducedMotion, withMotionClass } from "../lib/ui/motion.ts";
 
 export interface TooltipProps {
   text: string;

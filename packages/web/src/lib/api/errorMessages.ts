@@ -1,4 +1,4 @@
-import { ApiError } from "../api.ts";
+import { ApiError } from "./api.ts";
 
 export type ApiErrorKind =
   | "already-ready"

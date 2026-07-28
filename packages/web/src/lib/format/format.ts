@@ -1,4 +1,4 @@
-import type { Lang } from "../i18n.ts";
+import type { Lang } from "../../i18n/i18n.ts";
 
 export function formatDate(iso: string, lang: Lang): string {
   const date = new Date(iso);

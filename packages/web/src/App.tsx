@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "preact/hooks";
 import type { AddedVia, ArticleCounts, ArticleListItem } from "@clipfeed/shared/types";
-import { dictionaries, type Lang, readStoredLang, writeStoredLang } from "./i18n.ts";
-import { useTheme } from "./lib/theme.ts";
+import { dictionaries, type Lang, readStoredLang, writeStoredLang } from "./i18n/i18n.ts";
+import { useTheme } from "./lib/ui/theme.ts";
 import {
   type ArticleCountsParams,
   type ArticlesQueryParams,
@@ -19,28 +19,39 @@ import {
   retryArticle,
   searchAdminArticles,
   searchArticles,
-} from "./api.ts";
-import { computeDayBoundaries } from "./lib/dayBoundaries.ts";
-import { readStoredSearchMode, type SearchMode, writeStoredSearchMode } from "./lib/searchMode.ts";
-import { isShowingSemanticFallback, shouldRunSemanticFallback } from "./lib/searchFallback.ts";
-import { computeLogoResetState } from "./lib/feedReset.ts";
-import { canMutate, classifyMeOutcome, resolveEffectiveLang } from "./lib/ownerMode.ts";
-import { isPickOfTheDay } from "./lib/pickOfTheDay.ts";
-import { EMPTY_FILTER_STATE, filterReducer } from "./lib/filterState.ts";
-import { bucketSection, type DateSection, groupArticlesBySection } from "./lib/dateGrouping.ts";
+} from "./lib/api/api.ts";
+import { computeDayBoundaries } from "./lib/feed/dayBoundaries.ts";
+import {
+  readStoredSearchMode,
+  type SearchMode,
+  writeStoredSearchMode,
+} from "./lib/search/searchMode.ts";
+import {
+  isShowingSemanticFallback,
+  shouldRunSemanticFallback,
+} from "./lib/search/searchFallback.ts";
+import { computeLogoResetState } from "./lib/feed/feedReset.ts";
+import { canMutate, classifyMeOutcome, resolveEffectiveLang } from "./lib/api/ownerMode.ts";
+import { isPickOfTheDay } from "./lib/feed/pickOfTheDay.ts";
+import { EMPTY_FILTER_STATE, filterReducer } from "./lib/feed/filterState.ts";
+import {
+  bucketSection,
+  type DateSection,
+  groupArticlesBySection,
+} from "./lib/feed/dateGrouping.ts";
 import {
   readStoredSectionState,
   type SectionOpenState,
   writeStoredSectionState,
-} from "./lib/sectionState.ts";
-import { fetchInitialPages, shouldFetchOnEarlierExpand } from "./lib/pagination.ts";
-import { loadAgentSchedule } from "./lib/agentSchedule.ts";
-import { loadRepoUrl } from "./lib/repoConfig.ts";
-import { classifyApiError, localizedErrorMessage } from "./lib/errorMessages.ts";
-import { mergeRefreshedArticles, pickFailedIds } from "./lib/failedRefresh.ts";
-import { isArticleInList, parseDeepLinkId } from "./lib/deepLink.ts";
-import { applyFeedPollSnapshot, feedPollDelayMs, hasPendingArticles } from "./lib/feedPoll.ts";
-import { translateQueue } from "./lib/translateQueue.ts";
+} from "./lib/feed/sectionState.ts";
+import { fetchInitialPages, shouldFetchOnEarlierExpand } from "./lib/feed/pagination.ts";
+import { loadAgentSchedule } from "./lib/api/agentSchedule.ts";
+import { loadRepoUrl } from "./lib/api/repoConfig.ts";
+import { classifyApiError, localizedErrorMessage } from "./lib/api/errorMessages.ts";
+import { mergeRefreshedArticles, pickFailedIds } from "./lib/feed/failedRefresh.ts";
+import { isArticleInList, parseDeepLinkId } from "./lib/feed/deepLink.ts";
+import { applyFeedPollSnapshot, feedPollDelayMs, hasPendingArticles } from "./lib/feed/feedPoll.ts";
+import { translateQueue } from "./lib/content/translateQueue.ts";
 import { Header } from "./components/Header.tsx";
 import { AddModal } from "./components/AddModal.tsx";
 import { ActiveFilterChips, Sidebar, SourcePills, TopicPills } from "./components/Sidebar.tsx";
@@ -133,7 +144,7 @@ async function fetchSemanticSearch(isOwner: boolean, query: string): Promise<Art
 
 // Same owner/visitor redaction split as fetchArticleList above, but for a
 // single row by id — used by the deep-link resolution effect below when a
-// Telegram-post link (#article-<id>, see lib/deepLink.ts) points at an
+// Telegram-post link (#article-<id>, see lib/feed/deepLink.ts) points at an
 // article that isn't in the currently loaded page(s).
 async function fetchArticleById(isOwner: boolean, id: string): Promise<ArticleListItem> {
   if (isOwner) return await getAdminArticle(id);
@@ -221,7 +232,7 @@ export function App() {
   // Deep-link resolution (Task 29 Part B, extended in Task 32 Part B: a
   // Telegram drip post links to "/a/<id>" now — a real path, required for
   // link previews — but the legacy "#article-<id>" hash from
-  // already-published posts is still parsed; see lib/deepLink.ts).
+  // already-published posts is still parsed; see lib/feed/deepLink.ts).
   // deepLinkPending is the id still waiting to be resolved (consumed
   // exactly once, either by finding it in the loaded list or by fetching
   // it standalone); deepLinkedArticle holds the standalone-fetched result,

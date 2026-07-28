@@ -1,5 +1,5 @@
 import type { FaithfulnessJson, FaithfulnessVerdict } from "@clipfeed/shared/types";
-import type { Dictionary } from "../i18n.ts";
+import type { Dictionary } from "../../i18n/i18n.ts";
 
 // Pure helper reading the judge's per-claim detail out of the owner-only
 // faithfulness_json field (see ArticleCard.tsx's owner-mode footnote under

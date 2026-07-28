@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { ApiError } from "../api.ts";
+import { ApiError } from "./api.ts";
 import { classifyApiError, type ErrorMessageDict, localizedErrorMessage } from "./errorMessages.ts";
 
 const DICT: ErrorMessageDict = {

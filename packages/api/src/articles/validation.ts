@@ -142,7 +142,7 @@ export function sourceFromUrl(url: string): string {
 // see db.ts's getArticleCounts. Both are REQUIRED (no server-side default
 // makes sense: the server has no timezone concept, only the caller knows
 // what "today" means in ITS OWN local time — see
-// packages/web/src/lib/dayBoundaries.ts). `yesterday_start` must be
+// packages/web/src/lib/feed/dayBoundaries.ts). `yesterday_start` must be
 // strictly before `today_start`, or the count buckets would overlap/invert
 // silently instead of failing loudly on an obviously-wrong request.
 export interface CountsBoundaries {

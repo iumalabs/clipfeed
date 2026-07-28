@@ -4,7 +4,7 @@ import {
   faithfulnessCounts,
   visibleFaithfulnessBadgeInfo,
 } from "./faithfulness.ts";
-import { dictionaries } from "../i18n.ts";
+import { dictionaries } from "../../i18n/i18n.ts";
 
 Deno.test("faithfulnessCounts: null json (disabled/not run/visitor mode) -> null", () => {
   assertEquals(faithfulnessCounts(null), null);

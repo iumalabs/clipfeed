@@ -20,7 +20,7 @@ export function isValidRepoUrl(url: string | null | undefined): boolean {
 }
 
 // Reads its slice of the single shared GET /api/config fetch (see
-// lib/config.ts) — a fetch failure degrades to "no link shown", never
+// lib/api/config.ts) — a fetch failure degrades to "no link shown", never
 // blocks rendering the rest of the app.
 export async function loadRepoUrl(): Promise<string | null> {
   const body = await loadRawConfig();

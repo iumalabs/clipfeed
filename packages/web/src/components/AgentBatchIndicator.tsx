@@ -1,7 +1,7 @@
-import type { Dictionary, Lang } from "../i18n.ts";
-import { usePrefersReducedMotion, withMotionClass } from "../lib/motion.ts";
-import { agentBatchPhrase } from "../lib/agentBatch.ts";
-import { pluralizeRu } from "../lib/pluralizeRu.ts";
+import type { Dictionary, Lang } from "../i18n/i18n.ts";
+import { usePrefersReducedMotion, withMotionClass } from "../lib/ui/motion.ts";
+import { agentBatchPhrase } from "../lib/feed/agentBatch.ts";
+import { pluralizeRu } from "../lib/format/pluralizeRu.ts";
 
 export interface AgentBatchIndicatorProps {
   dict: Dictionary;
@@ -11,7 +11,7 @@ export interface AgentBatchIndicatorProps {
 }
 
 // Task 25 Part A: one aggregate summary replacing individual agent-pending
-// cards — see lib/agentBatch.ts for the M/N computation and Feed.tsx for
+// cards — see lib/feed/agentBatch.ts for the M/N computation and Feed.tsx for
 // where this mounts (top of whichever section the batch's articles bucket
 // into, normally "today").
 //

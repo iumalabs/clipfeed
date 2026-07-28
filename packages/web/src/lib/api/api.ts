@@ -12,7 +12,7 @@ import type {
   PublicArticleListResponse,
   SearchResponse,
 } from "@clipfeed/shared/types";
-import type { DayBoundaries } from "./lib/dayBoundaries.ts";
+import type { DayBoundaries } from "../feed/dayBoundaries.ts";
 
 export class ApiError extends Error {
   // `body` carries the full parsed JSON error response (when the response
@@ -234,7 +234,7 @@ export function resummarizeArticle(id: string): Promise<CreateArticleResponse> {
 // Task 35 Part A §3/§4: enqueues (or, if already done, no-ops on) lazy EN
 // generation for one article — the owner-only EN toggle triggers this per
 // visible card that's missing an English edition (see
-// lib/translateQueue.ts for the concurrency cap this is called under).
+// lib/content/translateQueue.ts for the concurrency cap this is called under).
 export interface TranslateResponse {
   id: string;
   status: "pending" | "already-translated";

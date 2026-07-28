@@ -1,4 +1,4 @@
-import type { Dictionary } from "../i18n.ts";
+import type { Dictionary } from "../i18n/i18n.ts";
 
 export interface TagFacet {
   tag: string;

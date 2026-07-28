@@ -103,7 +103,7 @@ const app = new Hono<AppEnv>();
 // agent_hour_utc/agent_daily_picks (Task 24 Part D): exposed so the SPA can
 // render a live "new articles in Xh Ym" countdown when today's section is
 // empty, computed client-side from the browser's own local timezone (see
-// packages/web/src/lib/agentSchedule.ts) — same parseHour() the scheduled
+// packages/web/src/lib/api/agentSchedule.ts) — same parseHour() the scheduled
 // dispatcher itself uses, so "disabled" here means exactly the same thing
 // it means for the cron (an empty/invalid AGENT_HOUR_UTC), never null vs.
 // some other silently-different definition of "off".
@@ -295,7 +295,7 @@ app.get("/api/articles", async (c) => {
 // the true bucketed totals without fetching every row, which would defeat
 // lazy loading entirely. D1 has no timezone concept, so the two
 // local-calendar-day boundaries (see bucketSection in
-// packages/web/src/lib/dateGrouping.ts) are computed CLIENT-SIDE, in the
+// packages/web/src/lib/feed/dateGrouping.ts) are computed CLIENT-SIDE, in the
 // browser's own local time, and passed here as UTC ISO instants — the
 // server only ever does a plain string comparison against them (added_at
 // is stored as zero-padded ISO 8601, so lexicographic order == chronological

@@ -5,8 +5,9 @@ import { runSql } from "../fixtures/db.ts";
 
 // Task 49 regression: the feed used to collapse to a single page (~11 items
 // shown while the DB held 97) because the initial-load loop and the
-// feed-level poll had separate failure modes — see packages/web/src/lib/
-// pagination.ts's fetchInitialPages and feedPoll.ts's applyFeedPollSnapshot.
+// feed-level poll had separate failure modes — see
+// packages/web/src/lib/feed/pagination.ts's fetchInitialPages and
+// feedPoll.ts's applyFeedPollSnapshot.
 // This test seeds the incident's own numbers (19 today / 30 yesterday / page
 // size 20) and asserts both halves directly against a real running worker.
 //

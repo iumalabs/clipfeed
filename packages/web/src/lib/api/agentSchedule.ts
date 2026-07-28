@@ -65,7 +65,7 @@ export interface AgentScheduleConfig {
 const DEFAULT_AGENT_DAILY_PICKS = 10;
 
 // Reads its slice of the single shared GET /api/config fetch (see
-// lib/config.ts) — a fetch failure degrades to "disabled" (null hour), never
+// lib/api/config.ts) — a fetch failure degrades to "disabled" (null hour), never
 // blocks rendering the empty-Today state.
 export async function loadAgentSchedule(): Promise<AgentScheduleConfig> {
   const body = await loadRawConfig();

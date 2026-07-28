@@ -1,4 +1,7 @@
-import { classifyFailure, type PermanentReasonKey } from "../../../shared/src/classify-failure.ts";
+import {
+  classifyFailure,
+  type PermanentReasonKey,
+} from "../../../../shared/src/classify-failure.ts";
 import type { FailureClass } from "@clipfeed/shared/types";
 
 // Pure helpers deciding what a failed-article card shows and which actions
