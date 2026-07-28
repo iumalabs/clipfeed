@@ -84,6 +84,18 @@ Two layers, both required to run cleanly before opening a PR:
   than the fast test job, and the drift class it exists to catch is already caught deterministically
   by the contract tests above, which do block).
 
+### Git hooks
+
+Not active by default — run `deno task hooks:install` once per clone
+(`git config core.hooksPath
+scripts/git-hooks`). This makes `git commit` run
+`scripts/git-hooks/pre-commit`, which blocks the commit on the first failing step:
+`deno fmt --check`, `deno lint`, `deno task test`, then `deno task
+e2e`. Set `SKIP_E2E_HOOK=1` in
+the environment for one commit to skip only the (slower) e2e step; there's no flag to skip the rest,
+since fmt/lint/unit-tests are fast enough that skipping them isn't worth the risk of pushing
+something CI will just reject anyway.
+
 ## API documentation
 
 Once deployed (or under `deno task dev`), visit `/docs` for interactive Swagger UI covering every

@@ -102,6 +102,54 @@ function projectColumns(rows: FakeRow[], columns: ColumnProjection[] | null): Fa
   });
 }
 
+// Task 51: shared WHERE-clause evaluator, extracted from queryList so
+// buildCountsQuery's counts query (below) can filter by the exact same
+// tag/source/q/archived/status conditions without duplicating the parsing
+// logic — `viStart` is the index into `values` where the WHERE clause's own
+// binds begin (queryList's binds start at 0; the counts query's WHERE binds
+// start after the 4 today/yesterday boundary binds baked into its SELECT).
+function applyWhereConditions(
+  rows: FakeRow[],
+  whereClause: string,
+  values: unknown[],
+  viStart: number,
+): FakeRow[] {
+  let candidates = rows;
+  let vi = viStart;
+  for (const clause of whereClause.split(/\s+AND\s+/i)) {
+    const trimmed = clause.trim();
+
+    if (trimmed.startsWith("(")) {
+      const conds = trimmed.slice(1, -1).split(/\s+OR\s+/i).map((part) => {
+        const col = part.trim().match(/^(\w+)/)![1];
+        const value = values[vi++] as string;
+        return { col, value };
+      });
+      candidates = candidates.filter((row) =>
+        conds.some(({ col, value }) => likeTest(value)(row[col]))
+      );
+      continue;
+    }
+
+    const eq = trimmed.match(/^(\w+)\s*=\s*\?$/);
+    const lt = trimmed.match(/^(\w+)\s*<\s*\?$/);
+    const like = trimmed.match(/^(\w+)\s+LIKE\s+\?$/i);
+    const value = values[vi++];
+
+    if (eq) {
+      candidates = candidates.filter((row) => row[eq[1]] === value);
+    } else if (lt) {
+      candidates = candidates.filter((row) => {
+        const rowValue = row[lt[1]];
+        return typeof rowValue === "string" && typeof value === "string" && rowValue < value;
+      });
+    } else if (like) {
+      candidates = candidates.filter((row) => likeTest(value as string)(row[like[1]]));
+    }
+  }
+  return candidates;
+}
+
 export class FakeD1 implements D1Database {
   rows: FakeRow[] = [];
 
@@ -535,6 +583,33 @@ export class FakeD1 implements D1Database {
         .map((r) => ({ id: r.id, ts: r.added_at }));
     }
 
+    // Task 51: buildCountsQuery's SUM(CASE WHEN...) bucketing query — see
+    // GET /api/articles/counts. Binds are always
+    // [todayStart, yesterdayStart, todayStart, yesterdayStart, ...filterBinds]
+    // (the boundary values are baked into the SELECT twice each, once per
+    // CASE), so the WHERE clause's own filter binds (evaluated via the same
+    // applyWhereConditions used by queryList, for tag/source/q/archived/status)
+    // start at index 4.
+    if (sql.startsWith("SELECT SUM(CASE WHEN added_at >= ? THEN 1 ELSE 0 END) as today,")) {
+      const todayStart = values[0] as string;
+      const yesterdayStart = values[1] as string;
+      let candidates = [...this.rows];
+      const whereMatch = sql.match(/FROM articles WHERE (.+)$/);
+      if (whereMatch) {
+        candidates = applyWhereConditions(candidates, whereMatch[1], values, 4);
+      }
+      let today = 0;
+      let yesterday = 0;
+      let earlier = 0;
+      for (const r of candidates) {
+        const addedAt = r.added_at as string;
+        if (addedAt >= todayStart) today++;
+        else if (addedAt >= yesterdayStart) yesterday++;
+        else earlier++;
+      }
+      return [{ today, yesterday, earlier }];
+    }
+
     throw new Error(`FakeD1: unsupported query: ${sql}`);
   }
 
@@ -544,38 +619,7 @@ export class FakeD1 implements D1Database {
 
     const whereMatch = sql.match(/WHERE (.+?) ORDER BY/);
     if (whereMatch) {
-      let vi = 0;
-      for (const clause of whereMatch[1].split(/\s+AND\s+/i)) {
-        const trimmed = clause.trim();
-
-        if (trimmed.startsWith("(")) {
-          const conds = trimmed.slice(1, -1).split(/\s+OR\s+/i).map((part) => {
-            const col = part.trim().match(/^(\w+)/)![1];
-            const value = values[vi++] as string;
-            return { col, value };
-          });
-          candidates = candidates.filter((row) =>
-            conds.some(({ col, value }) => likeTest(value)(row[col]))
-          );
-          continue;
-        }
-
-        const eq = trimmed.match(/^(\w+)\s*=\s*\?$/);
-        const lt = trimmed.match(/^(\w+)\s*<\s*\?$/);
-        const like = trimmed.match(/^(\w+)\s+LIKE\s+\?$/i);
-        const value = values[vi++];
-
-        if (eq) {
-          candidates = candidates.filter((row) => row[eq[1]] === value);
-        } else if (lt) {
-          candidates = candidates.filter((row) => {
-            const rowValue = row[lt[1]];
-            return typeof rowValue === "string" && typeof value === "string" && rowValue < value;
-          });
-        } else if (like) {
-          candidates = candidates.filter((row) => likeTest(value as string)(row[like[1]]));
-        }
-      }
+      candidates = applyWhereConditions(candidates, whereMatch[1], values, 0);
     }
 
     candidates.sort((a, b) => (b.added_at as string).localeCompare(a.added_at as string));

@@ -228,6 +228,24 @@ export interface PublicArticleListResponse {
   next_cursor: string | null;
 }
 
+// Task 51: GET /api/articles/counts / /api/admin/articles/counts — a
+// COUNT-only companion to the list endpoints, for the SPA's lazy-loaded
+// "Earlier" section header (and the sidebar total) to show the TRUE total
+// without fetching every row (which would defeat lazy loading). Bucketing
+// must agree with the SPA's own local-calendar-day logic (bucketSection in
+// packages/web/src/lib/dateGrouping.ts) — since D1 has no timezone concept,
+// the caller passes the local "start of today"/"start of yesterday"
+// boundaries as UTC ISO instants (see packages/web/src/lib/dayBoundaries.ts)
+// and the server buckets purely by comparing added_at against them. `total`
+// is always today+yesterday+earlier (the three buckets partition every row
+// matching the active filters, so it's never independently wrong).
+export interface ArticleCounts {
+  today: number;
+  yesterday: number;
+  earlier: number;
+  total: number;
+}
+
 export interface PatchArticleRequest {
   archived?: boolean;
   tags?: string[];

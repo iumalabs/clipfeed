@@ -1,5 +1,10 @@
 import { assertEquals } from "@std/assert";
-import { buildArticlesUrl, buildSearchUrl } from "./api.ts";
+import { buildArticlesUrl, buildCountsUrl, buildSearchUrl } from "./api.ts";
+
+const BOUNDARIES = {
+  todayStart: "2026-01-03T00:00:00.000Z",
+  yesterdayStart: "2026-01-02T00:00:00.000Z",
+};
 
 Deno.test("buildArticlesUrl: no params yields the bare endpoint", () => {
   assertEquals(buildArticlesUrl({}), "/api/articles");
@@ -54,6 +59,43 @@ Deno.test("buildArticlesUrl: combines cursor + tag + source + q + archived, limi
 
 Deno.test("buildArticlesUrl: empty-string filters are omitted, not sent as blank params", () => {
   assertEquals(buildArticlesUrl({ tag: "", source: "", q: "" }), "/api/articles");
+});
+
+// --- Task 51: buildCountsUrl ---
+
+Deno.test("buildCountsUrl: no extra filters — just the two required boundaries", () => {
+  assertEquals(
+    buildCountsUrl(BOUNDARIES),
+    "/api/articles/counts?today_start=2026-01-03T00%3A00%3A00.000Z&" +
+      "yesterday_start=2026-01-02T00%3A00%3A00.000Z",
+  );
+});
+
+Deno.test("buildCountsUrl: an explicit base swaps the endpoint (owner mode)", () => {
+  const url = buildCountsUrl(BOUNDARIES, {}, "/api/admin/articles/counts");
+  assertEquals(url.startsWith("/api/admin/articles/counts?"), true);
+});
+
+Deno.test("buildCountsUrl: combines tag + source + q + archived, appended after the boundaries", () => {
+  const url = buildCountsUrl(BOUNDARIES, {
+    tag: "ai",
+    source: "example.com",
+    q: "widget",
+    archived: true,
+  });
+  assertEquals(
+    url,
+    "/api/articles/counts?today_start=2026-01-03T00%3A00%3A00.000Z&" +
+      "yesterday_start=2026-01-02T00%3A00%3A00.000Z&tag=ai&source=example.com&q=widget&archived=1",
+  );
+});
+
+Deno.test("buildCountsUrl: archived false serializes as 0, omitted filters are simply absent", () => {
+  assertEquals(
+    buildCountsUrl(BOUNDARIES, { archived: false }),
+    "/api/articles/counts?today_start=2026-01-03T00%3A00%3A00.000Z&" +
+      "yesterday_start=2026-01-02T00%3A00%3A00.000Z&archived=0",
+  );
 });
 
 Deno.test("buildSearchUrl: defaults to /api/search", () => {

@@ -136,3 +136,46 @@ export function validatePatchArticleRequest(body: unknown): ValidationResult<Pat
 export function sourceFromUrl(url: string): string {
   return new URL(url).hostname.replace(/^www\./, "");
 }
+
+// Task 51: validates the two local-calendar-day boundaries GET
+// /api/articles/counts (and its admin variant) require as query params —
+// see db.ts's getArticleCounts. Both are REQUIRED (no server-side default
+// makes sense: the server has no timezone concept, only the caller knows
+// what "today" means in ITS OWN local time — see
+// packages/web/src/lib/dayBoundaries.ts). `yesterday_start` must be
+// strictly before `today_start`, or the count buckets would overlap/invert
+// silently instead of failing loudly on an obviously-wrong request.
+export interface CountsBoundaries {
+  todayStart: string;
+  yesterdayStart: string;
+}
+
+export function validateCountsBoundaries(
+  query: { today_start?: string; yesterday_start?: string },
+): ValidationResult<CountsBoundaries> {
+  const { today_start: todayStart, yesterday_start: yesterdayStart } = query;
+  if (!todayStart || !yesterdayStart) {
+    return {
+      ok: false,
+      error: { status: 400, error: "today_start and yesterday_start query params are required" },
+    };
+  }
+  const todayMs = Date.parse(todayStart);
+  const yesterdayMs = Date.parse(yesterdayStart);
+  if (Number.isNaN(todayMs) || Number.isNaN(yesterdayMs)) {
+    return {
+      ok: false,
+      error: {
+        status: 400,
+        error: "today_start and yesterday_start must be valid ISO 8601 timestamps",
+      },
+    };
+  }
+  if (yesterdayMs >= todayMs) {
+    return {
+      ok: false,
+      error: { status: 400, error: "yesterday_start must be strictly before today_start" },
+    };
+  }
+  return { ok: true, value: { todayStart, yesterdayStart } };
+}

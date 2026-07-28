@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "preact/hooks";
-import type { AddedVia, ArticleListItem } from "@clipfeed/shared/types";
+import type { AddedVia, ArticleCounts, ArticleListItem } from "@clipfeed/shared/types";
 import { dictionaries, type Lang, readStoredLang, writeStoredLang } from "./i18n.ts";
 import { useTheme } from "./lib/theme.ts";
 import {
+  type ArticleCountsParams,
   type ArticlesQueryParams,
   createArticle,
   deleteArticle,
   getAdminArticle,
+  getAdminArticleCounts,
   getAdminMe,
   getArticle,
+  getArticleCounts,
   listAdminArticles,
   listArticles,
   patchArticle,
@@ -17,6 +20,7 @@ import {
   searchAdminArticles,
   searchArticles,
 } from "./api.ts";
+import { computeDayBoundaries } from "./lib/dayBoundaries.ts";
 import { readStoredSearchMode, type SearchMode, writeStoredSearchMode } from "./lib/searchMode.ts";
 import { isShowingSemanticFallback, shouldRunSemanticFallback } from "./lib/searchFallback.ts";
 import { computeLogoResetState } from "./lib/feedReset.ts";
@@ -93,6 +97,19 @@ async function fetchArticleList(
   };
 }
 
+// Task 51: COUNT-only companion to fetchArticleList above — same
+// owner/visitor endpoint split (owner sees every status, a visitor only
+// 'ready'), same filters. Boundaries are recomputed on every call (cheap,
+// pure) rather than memoized, so a call that happens to straddle local
+// midnight always uses a fresh "today".
+function fetchArticleCounts(
+  isOwner: boolean,
+  params: ArticleCountsParams,
+): Promise<ArticleCounts> {
+  const boundaries = computeDayBoundaries();
+  return isOwner ? getAdminArticleCounts(boundaries, params) : getArticleCounts(boundaries, params);
+}
+
 // Semantic search's counterpart to fetchArticleList above — same
 // owner/visitor redaction split, but no pagination (GET /api/search is a
 // single bounded top-K list, already ranked by similarity — see search.ts
@@ -167,6 +184,12 @@ export function App() {
   const skipNextSemanticFetchRef = useRef(false);
 
   const [articles, setArticles] = useState<ArticleListItem[]>([]);
+  // Task 51: the server-computed today/yesterday/earlier/total, honoring
+  // the same active filters as `articles` — null means "not available yet,
+  // or the endpoint failed", in which case Feed/Sidebar fall back to
+  // computing from `articles` itself (the old, loaded-length-only
+  // behavior). Never blocks rendering: the fetch below is fire-and-forget.
+  const [articleCounts, setArticleCounts] = useState<ArticleCounts | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -349,6 +372,38 @@ export function App() {
     };
   }, [query, activeTag, activeSource, archivedView, isOwner, searchMode]);
 
+  // Task 51: server-computed counts, refetched on exactly the same
+  // "a fresh query is warranted" triggers as the initial-load effect above
+  // (filter/owner-mode change) — deliberately NOT on every feed poll tick,
+  // to keep this cheap (see the tick's own effect below, which does its own
+  // thing on the anyPending transition instead). The flat semantic-search
+  // view has no date sections at all (see isFlatSemanticView in Feed.tsx),
+  // so counts are meaningless there — skip the fetch and leave the stale
+  // value in place; it's simply unused while that view is showing.
+  useEffect(() => {
+    if (query.trim() !== "" && searchMode === "semantic") return;
+    let cancelled = false;
+    fetchArticleCounts(isOwner, {
+      tag: activeTag ?? undefined,
+      source: activeSource ?? undefined,
+      q: query || undefined,
+      archived: archivedView,
+    })
+      .then((counts) => {
+        if (!cancelled) setArticleCounts(counts);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn(
+          JSON.stringify({ event: "article_counts_fetch_failed", message: String(err) }),
+        );
+        setArticleCounts(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [query, activeTag, activeSource, archivedView, isOwner, searchMode]);
+
   // Task 43 Part 3: a KEYWORD search that comes back empty runs the same
   // query once in SEMANTIC mode in the background; if that finds anything,
   // flip into semantic mode with those results already in hand (see the
@@ -481,6 +536,35 @@ export function App() {
       stopTimer();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
+  }, [anyPending]);
+
+  // Task 51: "new articles arrive" (e.g. an agent run finishing, or a
+  // manual add resolving) is exactly the anyPending true -> false
+  // transition above — refresh counts once when a pending episode settles,
+  // rather than on every poll tick (which would defeat the point of "keep
+  // it cheap"). Reads current filters via the ref the poll above already
+  // maintains, so this doesn't need its own copy.
+  const wasPendingRef = useRef(false);
+  useEffect(() => {
+    if (wasPendingRef.current && !anyPending) {
+      const params = feedPollParamsRef.current;
+      if (!(params.query.trim() !== "" && params.searchMode === "semantic")) {
+        fetchArticleCounts(params.isOwner, {
+          tag: params.activeTag ?? undefined,
+          source: params.activeSource ?? undefined,
+          q: params.query || undefined,
+          archived: params.archivedView,
+        })
+          .then(setArticleCounts)
+          .catch((err) => {
+            console.warn(
+              JSON.stringify({ event: "article_counts_fetch_failed", message: String(err) }),
+            );
+            setArticleCounts(null);
+          });
+      }
+    }
+    wasPendingRef.current = anyPending;
   }, [anyPending]);
 
   // Resolves the deep link exactly once, after the initial (unfiltered,
@@ -899,6 +983,7 @@ export function App() {
                 activeTag={activeTag}
                 activeSource={activeSource}
                 onResetFilters={handleClearAll}
+                earlierCount={articleCounts?.earlier ?? null}
               />
             )}
         </main>
@@ -912,7 +997,7 @@ export function App() {
           sources={sourceFacets}
           activeSource={activeSource}
           onSourceClick={handleSourceClick}
-          totalCount={articles.length}
+          totalCount={articleCounts?.total ?? articles.length}
           archivedView={archivedView}
           onArchiveToggle={() => {
             setArchivedView((current) => !current);

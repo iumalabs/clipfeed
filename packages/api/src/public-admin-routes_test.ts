@@ -219,6 +219,130 @@ Deno.test("public reads: still 200 w/o auth even when Access IS configured", asy
   assertEquals((await app.request("/api/articles", {}, env, ctx)).status, 200);
 });
 
+// --- Task 51: GET /api/articles/counts + GET /api/admin/articles/counts —
+// COUNT-only companions for the SPA's lazy-loaded "Earlier" section header
+// and sidebar total. See db.ts's getArticleCounts. ---
+
+const COUNTS_BOUNDARIES =
+  "today_start=2026-01-03T00:00:00.000Z&yesterday_start=2026-01-02T00:00:00.000Z";
+
+Deno.test("GET /api/articles/counts: 400 when today_start/yesterday_start are missing, no auth required to reach the handler", async () => {
+  const env = makeEnv();
+  const ctx = makeExecutionContext().ctx;
+  const res = await app.request("/api/articles/counts", {}, env, ctx);
+  assertEquals(res.status, 400);
+});
+
+Deno.test("GET /api/articles/counts: 400 when yesterday_start is not strictly before today_start", async () => {
+  const env = makeEnv();
+  const ctx = makeExecutionContext().ctx;
+  const res = await app.request(
+    "/api/articles/counts?today_start=2026-01-02T00:00:00.000Z&yesterday_start=2026-01-02T00:00:00.000Z",
+    {},
+    env,
+    ctx,
+  );
+  assertEquals(res.status, 400);
+});
+
+Deno.test("GET /api/articles/counts: visitor sees only 'ready' totals; GET /api/admin/articles/counts (owner, default status) sees every status", async () => {
+  const { env, authHeaders } = await makeOwnerContext();
+  const ctx = makeExecutionContext().ctx;
+
+  await insertPendingArticle(env.DB, {
+    id: "cnt-ready",
+    url: "https://example.com/cnt-ready",
+    title: "cnt-ready",
+    source: "example.com",
+    tags: [],
+    added_via: "manual",
+    added_at: "2026-01-03T10:00:00.000Z",
+  });
+  const db = env.DB as unknown as FakeD1;
+  db.rows.find((r) => r.id === "cnt-ready")!.status = "ready";
+
+  await insertPendingArticle(env.DB, {
+    id: "cnt-pending",
+    url: "https://example.com/cnt-pending",
+    title: "cnt-pending",
+    source: "example.com",
+    tags: [],
+    added_via: "manual",
+    added_at: "2026-01-03T11:00:00.000Z",
+  });
+
+  await insertPendingArticle(env.DB, {
+    id: "cnt-failed",
+    url: "https://example.com/cnt-failed",
+    title: "cnt-failed",
+    source: "example.com",
+    tags: [],
+    added_via: "manual",
+    added_at: "2026-01-03T12:00:00.000Z",
+  });
+  await markArticleFailed(env.DB, "cnt-failed", "boom");
+
+  const visitorRes = await app.request(`/api/articles/counts?${COUNTS_BOUNDARIES}`, {}, env, ctx);
+  assertEquals(visitorRes.status, 200);
+  const visitorBody = await visitorRes.json();
+  assertEquals(visitorBody, { today: 1, yesterday: 0, earlier: 0, total: 1 });
+
+  const ownerRes = await app.request(
+    `/api/admin/articles/counts?${COUNTS_BOUNDARIES}`,
+    { headers: authHeaders },
+    env,
+    ctx,
+  );
+  assertEquals(ownerRes.status, 200);
+  const ownerBody = await ownerRes.json();
+  assertEquals(ownerBody, { today: 3, yesterday: 0, earlier: 0, total: 3 });
+});
+
+Deno.test("GET /api/admin/articles/counts: 401 without auth, even with valid boundaries", async () => {
+  const { env } = await makeOwnerContext();
+  const ctx = makeExecutionContext().ctx;
+  const res = await app.request(`/api/admin/articles/counts?${COUNTS_BOUNDARIES}`, {}, env, ctx);
+  assertEquals(res.status, 401);
+});
+
+Deno.test("GET /api/articles/counts: counts respect the tag filter, same as GET /api/articles", async () => {
+  const { env } = await makeOwnerContext();
+  const ctx = makeExecutionContext().ctx;
+
+  await insertPendingArticle(env.DB, {
+    id: "cnt-tag-a",
+    url: "https://example.com/cnt-tag-a",
+    title: "cnt-tag-a",
+    source: "example.com",
+    tags: ["news"],
+    added_via: "manual",
+    added_at: "2026-01-03T10:00:00.000Z",
+  });
+  const db = env.DB as unknown as FakeD1;
+  db.rows.find((r) => r.id === "cnt-tag-a")!.status = "ready";
+
+  await insertPendingArticle(env.DB, {
+    id: "cnt-tag-b",
+    url: "https://example.com/cnt-tag-b",
+    title: "cnt-tag-b",
+    source: "example.com",
+    tags: ["tech"],
+    added_via: "manual",
+    added_at: "2026-01-03T11:00:00.000Z",
+  });
+  db.rows.find((r) => r.id === "cnt-tag-b")!.status = "ready";
+
+  const unfiltered = await (
+    await app.request(`/api/articles/counts?${COUNTS_BOUNDARIES}`, {}, env, ctx)
+  ).json();
+  assertEquals(unfiltered.total, 2);
+
+  const filtered = await (
+    await app.request(`/api/articles/counts?${COUNTS_BOUNDARIES}&tag=news`, {}, env, ctx)
+  ).json();
+  assertEquals(filtered.total, 1);
+});
+
 // --- GET /api/admin/articles vs GET /api/articles: owner sees the real
 // error, a visitor never does (see articles_test.ts's dedicated privacy
 // regression test for the incident this fixes) ---

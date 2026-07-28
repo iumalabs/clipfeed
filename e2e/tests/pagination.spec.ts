@@ -9,7 +9,19 @@ import { runSql } from "../fixtures/db.ts";
 // pagination.ts's fetchInitialPages and feedPoll.ts's applyFeedPollSnapshot.
 // This test seeds the incident's own numbers (19 today / 30 yesterday / page
 // size 20) and asserts both halves directly against a real running worker.
-test("today+yesterday fully load, Show more extends Earlier, and a poll tick never shrinks the list", async ({ page }) => {
+//
+// Task 51: "Earlier" used to show however many rows had been lazy-loaded so
+// far (climbing as the user clicked "show more") instead of the true total —
+// see GET /api/articles/counts and Feed.tsx's resolveSectionCount. The
+// server count for an UNFILTERED view mixes in every other e2e fixture
+// group's own "earlier"-dated rows too (every non-pagination group is seeded
+// well into "earlier" — see seed-sql.ts's doc comment), so this isolates to
+// just this fixture group's own known 20 "earlier" rows via its tag, the same
+// way every other multi-group spec in this suite does (see
+// loadAllArticles.ts's doc comment).
+const PAGINATION_TAG = "e2e-pagination";
+
+test("today+yesterday fully load, Earlier's count is the true total from the start, and a poll tick never shrinks the list", async ({ page }) => {
   // Playwright's own headless tab visibility is platform-dependent — force
   // it non-hidden via an init script (runs before the SPA's own scripts) so
   // the feed poll (gated on `!document.hidden`, see App.tsx) isn't skipped
@@ -28,13 +40,25 @@ test("today+yesterday fully load, Show more extends Earlier, and a poll tick nev
   await expect(page.locator("#feed-section-today .feed-section-count")).toHaveText("20");
   await expect(page.locator("#feed-section-yesterday .feed-section-count")).toHaveText("30");
 
-  // The initial-load loop's own boundary page already pulled in the first
-  // 10 of pagination's 20 "earlier" fixture rows (see fetchInitialPages).
+  await page.locator(".tag-pill", { hasText: PAGINATION_TAG }).first().click();
+  await expect(page.locator(".filter-chip")).toContainText(PAGINATION_TAG);
+
   await page.locator("#feed-section-earlier .feed-section-header").click();
-  await expect(page.locator("#feed-section-earlier .feed-section-count")).toHaveText("10");
+  // Task 51 regression: the count is the true total from the very first
+  // render (20, this fixture group's own "earlier" row count) — the
+  // initial-load loop's own boundary page has only pulled in the first 10
+  // of them by this point (see fetchInitialPages), which is exactly the
+  // stale value the old, loaded-length-only header used to show.
+  await expect(page.locator("#feed-section-earlier .feed-section-count")).toHaveText("20");
 
   await page.locator(".show-more-button").click();
-  await expect(page.locator("#feed-section-earlier .feed-section-count")).toHaveText("30");
+  // Loading the remaining 10 rows must NOT change the header — still 20.
+  // (The header text is now server-driven and no longer tracks loaded-item
+  // count — see resolveSectionCount — so it can't double as a "the new page
+  // finished loading" signal the way it used to; wait on the actual card
+  // count instead before measuring totalBefore below.)
+  await expect(page.locator("#feed-section-earlier .feed-section-count")).toHaveText("20");
+  await expect(page.locator("#feed-section-earlier article")).toHaveCount(20);
 
   const totalBefore = await page.locator("article").count();
 

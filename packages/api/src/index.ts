@@ -2,6 +2,7 @@ import "./env.d.ts";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type {
+  ArticleCounts,
   DuplicateArticleResponse,
   EmbeddingsBackfillResponse,
   QueueMessage,
@@ -18,6 +19,7 @@ import {
   findArticleIdByUrl,
   findRecentTitlesForDedup,
   getArticleById,
+  getArticleCounts,
   getFailureStats,
   getFaithfulnessStats,
   getLastAgentActivity,
@@ -47,6 +49,7 @@ import {
 import {
   MAX_BODY_BYTES,
   sourceFromUrl,
+  validateCountsBoundaries,
   validateCreateArticleRequest,
   validateHtml,
   validatePatchArticleRequest,
@@ -287,6 +290,33 @@ app.get("/api/articles", async (c) => {
   return c.json({ items: result.items.map(toPublicListItem), next_cursor: result.next_cursor });
 });
 
+// Task 51: COUNT-only companion to GET /api/articles, for the SPA's
+// lazy-loaded "Earlier" section header (and the sidebar total) — showing
+// the true bucketed totals without fetching every row, which would defeat
+// lazy loading entirely. D1 has no timezone concept, so the two
+// local-calendar-day boundaries (see bucketSection in
+// packages/web/src/lib/dateGrouping.ts) are computed CLIENT-SIDE, in the
+// browser's own local time, and passed here as UTC ISO instants — the
+// server only ever does a plain string comparison against them (added_at
+// is stored as zero-padded ISO 8601, so lexicographic order == chronological
+// order). Same filters as the list route (tag/source/q/archived); status is
+// always forced to 'ready' here, same as GET /api/articles itself.
+app.get("/api/articles/counts", async (c) => {
+  const boundaries = validateCountsBoundaries(c.req.query());
+  if (!boundaries.ok) return c.json({ error: boundaries.error.error }, boundaries.error.status);
+  const params = parseArticleListParams(c);
+  const counts = await getArticleCounts(c.env.DB, {
+    tag: params.tag,
+    source: params.source,
+    q: params.q,
+    archived: params.archived,
+    status: "ready",
+    todayStart: boundaries.value.todayStart,
+    yesterdayStart: boundaries.value.yesterdayStart,
+  });
+  return c.json(counts satisfies ArticleCounts);
+});
+
 // Public — excludes full_text and the raw error string (see
 // PublicArticle/toPublicArticle). The full row is only available to the
 // owner, via GET /api/admin/articles/:id below. Task 41 Part D: a
@@ -461,6 +491,26 @@ app.get("/api/admin/articles", async (c) => {
   await sweepStalePending(c.env.DB, c.env.PENDING_TIMEOUT_MIN, c.env.QUEUE_WAIT_TIMEOUT_MIN);
   const result = await listArticles(c.env.DB, parseArticleListParams(c));
   return c.json(result);
+});
+
+// Owner-only equivalent of GET /api/articles/counts — same boundary
+// contract, but honors status=ready|pending|failed|all like GET
+// /api/admin/articles above (default: every status), since owner and
+// visitor totals genuinely differ (a visitor only ever sees 'ready').
+app.get("/api/admin/articles/counts", async (c) => {
+  const boundaries = validateCountsBoundaries(c.req.query());
+  if (!boundaries.ok) return c.json({ error: boundaries.error.error }, boundaries.error.status);
+  const params = parseArticleListParams(c);
+  const counts = await getArticleCounts(c.env.DB, {
+    tag: params.tag,
+    source: params.source,
+    q: params.q,
+    archived: params.archived,
+    status: params.status,
+    todayStart: boundaries.value.todayStart,
+    yesterdayStart: boundaries.value.yesterdayStart,
+  });
+  return c.json(counts satisfies ArticleCounts);
 });
 
 // Owner-only full row, including full_text and the raw error string.

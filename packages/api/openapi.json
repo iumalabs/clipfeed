@@ -327,6 +327,17 @@
           "next_cursor": { "type": ["string", "null"] }
         }
       },
+      "ArticleCounts": {
+        "type": "object",
+        "required": ["today", "yesterday", "earlier", "total"],
+        "description": "Task 51: COUNT-only companion to the list endpoints — lets the SPA show the TRUE total for a lazy-loaded section (e.g. \"Earlier\") without fetching every row, which would defeat lazy loading. `total` is always today+yesterday+earlier.",
+        "properties": {
+          "today": { "type": "integer", "minimum": 0 },
+          "yesterday": { "type": "integer", "minimum": 0 },
+          "earlier": { "type": "integer", "minimum": 0 },
+          "total": { "type": "integer", "minimum": 0 }
+        }
+      },
       "CreateArticleRequest": {
         "type": "object",
         "required": ["url"],
@@ -732,6 +743,20 @@
         "schema": { "type": "string", "enum": ["ready", "pending", "failed", "all"] },
         "description": "Task 41 Part D: filter by article status; 'all' (or omitting this param) means every status. Honored ONLY by GET /api/admin/articles — GET /api/articles (public) always forces 'ready' server-side regardless of this param, so a visitor can never request pending/failed rows."
       },
+      "CountsTodayStart": {
+        "name": "today_start",
+        "in": "query",
+        "required": true,
+        "schema": { "type": "string", "format": "date-time" },
+        "description": "Task 51: the caller's local \"start of today\", as a UTC ISO-8601 instant — D1 has no timezone concept, so the client (which knows its own local time) computes this boundary and the server just compares `added_at` strings against it."
+      },
+      "CountsYesterdayStart": {
+        "name": "yesterday_start",
+        "in": "query",
+        "required": true,
+        "schema": { "type": "string", "format": "date-time" },
+        "description": "The caller's local \"start of yesterday\", as a UTC ISO-8601 instant. Must be strictly before `today_start` (400 otherwise)."
+      },
       "SearchQuery": {
         "name": "q",
         "in": "query",
@@ -851,6 +876,31 @@
               }
             }
           }
+        }
+      }
+    },
+    "/api/articles/counts": {
+      "get": {
+        "tags": ["public"],
+        "summary": "Bucketed article counts (public)",
+        "description": "Task 51: COUNT-only companion to GET /api/articles — same filters (tag/source/q/archived), always status='ready'. Exists so the SPA's lazy-loaded \"Earlier\" section header (and the sidebar total) can show the TRUE total without fetching every row, which would defeat lazy loading. `today`/`yesterday`/`earlier` are bucketed by comparing `added_at` against the boundaries the caller passes — see the CountsTodayStart/CountsYesterdayStart parameters for why the client computes them, not the server.",
+        "operationId": "getPublicArticleCounts",
+        "parameters": [
+          { "$ref": "#/components/parameters/CountsTodayStart" },
+          { "$ref": "#/components/parameters/CountsYesterdayStart" },
+          { "$ref": "#/components/parameters/ListTag" },
+          { "$ref": "#/components/parameters/ListSource" },
+          { "$ref": "#/components/parameters/ListQuery" },
+          { "$ref": "#/components/parameters/ListArchived" }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ArticleCounts" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
         }
       }
     },
@@ -1084,6 +1134,34 @@
             }
           },
           "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/articles/counts": {
+      "get": {
+        "tags": ["admin"],
+        "summary": "Bucketed article counts (owner)",
+        "description": "Owner-only equivalent of GET /api/articles/counts — same boundary contract, but honors status=ready|pending|failed|all like GET /api/admin/articles (default: every status), since owner and visitor totals genuinely differ (a visitor only ever sees 'ready').",
+        "operationId": "getAdminArticleCounts",
+        "security": [{ "cloudflareAccess": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/CountsTodayStart" },
+          { "$ref": "#/components/parameters/CountsYesterdayStart" },
+          { "$ref": "#/components/parameters/ListTag" },
+          { "$ref": "#/components/parameters/ListSource" },
+          { "$ref": "#/components/parameters/ListQuery" },
+          { "$ref": "#/components/parameters/ListArchived" },
+          { "$ref": "#/components/parameters/ListStatus" }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ArticleCounts" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" }
         }
       }
