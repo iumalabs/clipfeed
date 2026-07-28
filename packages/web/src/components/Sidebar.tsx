@@ -1,4 +1,5 @@
 import type { Dictionary } from "../i18n/i18n.ts";
+import { TelegramBanner } from "./TelegramBanner.tsx";
 
 export interface TagFacet {
   tag: string;
@@ -23,6 +24,7 @@ export interface SidebarProps {
   archivedView: boolean;
   onArchiveToggle: () => void;
   isOwner: boolean;
+  telegramChannelUrl: string | null;
 }
 
 export function TopicPills(
@@ -140,6 +142,7 @@ export function Sidebar(
     archivedView,
     onArchiveToggle,
     isOwner,
+    telegramChannelUrl,
   }: SidebarProps,
 ) {
   return (
@@ -183,6 +186,8 @@ export function Sidebar(
           {archivedView ? dict.sidebarBackToFeed : dict.sidebarArchiveLink}
         </button>
       )}
+
+      <TelegramBanner dict={dict} telegramChannelUrl={telegramChannelUrl} />
     </aside>
   );
 }

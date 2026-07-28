@@ -136,6 +136,13 @@
 # are actually sent per UTC day, as a flood guard against the scraping agent
 # producing more than one batch in a day.
 # TELEGRAM_CHANNEL_ID=
+# TELEGRAM_CHANNEL_URL: the public https://t.me/<name> link shown to
+# visitors as a "Subscribe on Telegram" banner (Sidebar.tsx/FilterSheet.tsx,
+# GET /api/config) — distinct from TELEGRAM_CHANNEL_ID above, which is the
+# internal id the publisher posts to, never a clickable link. [vars] default
+# "" (per the forkability policy); the banner only renders for a well-formed
+# https://t.me/ URL, so it's simply omitted everywhere until you set this.
+# TELEGRAM_CHANNEL_URL=
 # PUBLISH_START_HOUR_UTC=4
 # PUBLISH_END_HOUR_UTC=18
 # PUBLISH_ENABLED=true

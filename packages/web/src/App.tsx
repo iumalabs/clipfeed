@@ -47,6 +47,7 @@ import {
 import { fetchInitialPages, shouldFetchOnEarlierExpand } from "./lib/feed/pagination.ts";
 import { loadAgentSchedule } from "./lib/api/agentSchedule.ts";
 import { loadRepoUrl } from "./lib/api/repoConfig.ts";
+import { loadTelegramChannelUrl } from "./lib/api/telegramConfig.ts";
 import { classifyApiError, localizedErrorMessage } from "./lib/api/errorMessages.ts";
 import { mergeRefreshedArticles, pickFailedIds } from "./lib/feed/failedRefresh.ts";
 import { isArticleInList, parseDeepLinkId } from "./lib/feed/deepLink.ts";
@@ -238,6 +239,9 @@ export function App() {
   // Task 30 Part D: null hides both the header's GitHub icon and the
   // footer's license link (see repoConfig.ts, Header.tsx, Footer.tsx).
   const [repoUrl, setRepoUrl] = useState<string | null>(null);
+  // Task 56: null hides the "Subscribe on Telegram" banner in both the
+  // desktop Sidebar and the mobile FilterSheet (see telegramConfig.ts).
+  const [telegramChannelUrl, setTelegramChannelUrl] = useState<string | null>(null);
 
   // Deep-link resolution (Task 29 Part B, extended in Task 32 Part B: a
   // Telegram drip post links to "/a/<id>" now — a real path, required for
@@ -294,6 +298,12 @@ export function App() {
   // (see lib/repoConfig.ts) — fetched once and cached, same convention.
   useEffect(() => {
     loadRepoUrl().then(setRepoUrl);
+  }, []);
+
+  // Powers the sidebar/filter-sheet "Subscribe on Telegram" banner (see
+  // lib/telegramConfig.ts) — fetched once and cached, same convention.
+  useEffect(() => {
+    loadTelegramChannelUrl().then(setTelegramChannelUrl);
   }, []);
 
   // Debounce the raw search input into the value that actually drives fetches.
@@ -1035,6 +1045,7 @@ export function App() {
             setArchivedView((current) => !current);
           }}
           isOwner={isOwner}
+          telegramChannelUrl={telegramChannelUrl}
         />
       </div>
 
@@ -1055,6 +1066,7 @@ export function App() {
           setArchivedView((current) => !current);
         }}
         isOwner={isOwner}
+        telegramChannelUrl={telegramChannelUrl}
       />
 
       <Footer dict={dict} repoUrl={repoUrl} />

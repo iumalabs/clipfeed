@@ -117,6 +117,12 @@ app.get("/api/config", (c) => {
     // link and the footer's license link (see repoConfig.ts) — "" when
     // unset, never a hardcoded owner-specific fallback.
     repo_url: c.env.REPO_URL ?? "",
+    // Task 56: the public https://t.me/<name> subscribe link, distinct from
+    // TELEGRAM_CHANNEL_ID (the internal id the publisher posts to) — "" when
+    // unset, same never-a-hardcoded-fallback rule as repo_url above. Powers
+    // the sidebar/filter-sheet "Subscribe on Telegram" banner (see
+    // telegramConfig.ts).
+    telegram_channel_url: c.env.TELEGRAM_CHANNEL_URL ?? "",
   });
 });
 

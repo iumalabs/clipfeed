@@ -464,7 +464,13 @@
       },
       "ConfigResponse": {
         "type": "object",
-        "required": ["turnstile_site_key", "agent_hour_utc", "agent_daily_picks", "repo_url"],
+        "required": [
+          "turnstile_site_key",
+          "agent_hour_utc",
+          "agent_daily_picks",
+          "repo_url",
+          "telegram_channel_url"
+        ],
         "properties": {
           "turnstile_site_key": {
             "type": ["string", "null"],
@@ -478,6 +484,10 @@
           "repo_url": {
             "type": "string",
             "description": "Empty string when this fork hasn't set REPO_URL."
+          },
+          "telegram_channel_url": {
+            "type": "string",
+            "description": "The public https://t.me/<name> subscribe link, distinct from TELEGRAM_CHANNEL_ID (the internal id the publisher posts to). Empty string when this fork hasn't set TELEGRAM_CHANNEL_URL. Powers the sidebar/filter-sheet \"Subscribe on Telegram\" banner — only rendered for a well-formed https://t.me/ URL."
           }
         }
       },

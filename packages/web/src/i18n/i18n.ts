@@ -23,6 +23,9 @@ export interface Dictionary {
   sidebarTotalArticles: string;
   sidebarArchiveLink: string;
   sidebarBackToFeed: string;
+  telegramBannerText: string;
+  telegramBannerButton: string;
+  telegramBannerAria: string;
   showMore: string;
   sectionToday: string;
   sectionYesterday: string;
@@ -150,6 +153,9 @@ const ru: Dictionary = {
   sidebarTotalArticles: "Всего статей",
   sidebarArchiveLink: "Архив",
   sidebarBackToFeed: "К ленте",
+  telegramBannerText: "Свежие выжимки в Telegram",
+  telegramBannerButton: "Подписаться",
+  telegramBannerAria: "Подписаться на канал в Telegram",
   showMore: "Показать ещё",
   sectionToday: "Сегодня",
   sectionYesterday: "Вчера",
@@ -279,6 +285,9 @@ const en: Dictionary = {
   sidebarTotalArticles: "Total articles",
   sidebarArchiveLink: "Archive",
   sidebarBackToFeed: "Back to feed",
+  telegramBannerText: "Fresh summaries on Telegram",
+  telegramBannerButton: "Subscribe",
+  telegramBannerAria: "Subscribe to the Telegram channel",
   showMore: "Show more",
   sectionToday: "Today",
   sectionYesterday: "Yesterday",
