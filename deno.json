@@ -10,7 +10,8 @@
     "test": "deno test -A",
     "fmt": "deno fmt",
     "lint": "deno lint",
-    "e2e": "deno run -A scripts/e2e/run.ts"
+    "e2e": "deno run -A scripts/e2e/run.ts",
+    "hooks:install": "git config core.hooksPath scripts/git-hooks"
   },
   "imports": {
     "hono": "npm:hono@^4.6.0",

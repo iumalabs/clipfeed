@@ -1,0 +1,23 @@
+#!/bin/sh
+# Runs before every commit once activated (see README "Git hooks" section:
+# `deno task hooks:install` points git at this directory via
+# core.hooksPath). Blocks the commit on the first failing step, so a
+# regression like Task 51's — a code change that silently broke an existing
+# e2e assertion — is caught locally instead of surfacing later in CI.
+set -e
+
+echo "pre-commit: deno fmt --check"
+deno fmt --check
+
+echo "pre-commit: deno lint"
+deno lint
+
+echo "pre-commit: deno task test"
+deno task test
+
+if [ -n "$SKIP_E2E_HOOK" ]; then
+  echo "pre-commit: SKIP_E2E_HOOK set — skipping deno task e2e"
+else
+  echo "pre-commit: deno task e2e"
+  deno task e2e
+fi
