@@ -963,6 +963,7 @@ export function App() {
         onAddClick={() => setModalOpen(true)}
         isOwner={isOwner}
         repoUrl={repoUrl}
+        telegramChannelUrl={telegramChannelUrl}
         onFiltersClick={() => setFilterSheetOpen(true)}
         activeFilterCount={countActiveFilters(filters)}
       />
@@ -1069,7 +1070,7 @@ export function App() {
         telegramChannelUrl={telegramChannelUrl}
       />
 
-      <Footer dict={dict} repoUrl={repoUrl} />
+      <Footer dict={dict} repoUrl={repoUrl} telegramChannelUrl={telegramChannelUrl} />
 
       <ScrollToTopButton dict={dict} />
 
