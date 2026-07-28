@@ -15,7 +15,7 @@ import { buildDigestMessages } from "./telegram-digest.ts";
 import {
   AGENT_STARTED_TEXT,
   agentAlreadyRanWarning,
-  ALREADY_SAVED_TEXT,
+  alreadySavedText,
   HELP_TEXT,
   NO_DIGEST_ARTICLES_TEXT,
   NON_OWNER_REPLY,
@@ -30,6 +30,7 @@ import {
 import { timingSafeEqualStrings } from "./telegram-secret.ts";
 import {
   findArticleIdByUrl,
+  getArticleById,
   insertPendingArticle,
   listRecentReadyArticles,
 } from "../articles/db.ts";
@@ -37,6 +38,7 @@ import { enqueueArticleJob } from "../pipeline/queue.ts";
 import { sourceFromUrl } from "../articles/validation.ts";
 import { runAgentJob } from "../agent/agent.ts";
 import { formatUtcHourMinute, readAgentRunHistory } from "../agent/agent-run-tracker.ts";
+import { cardUrl } from "./telegram-post.ts";
 import { publishNextArticle } from "./telegram-publish.ts";
 import { isRobotsRespectEnabled, robotsAllowsUrl } from "../pipeline/robots.ts";
 
@@ -106,11 +108,14 @@ async function handleUrlMessage(
   const existingId = await findArticleIdByUrl(c.env.DB, url);
   if (existingId) {
     if (sent) {
+      const existing = await getArticleById(c.env.DB, existingId);
+      const trimmedBase = (c.env.PUBLIC_BASE_URL ?? "").trim();
+      const link = trimmedBase ? cardUrl(trimmedBase, existingId) : null;
       await editMessageText(
         config.botToken,
         config.ownerChatId,
         sent.message_id,
-        ALREADY_SAVED_TEXT,
+        alreadySavedText(existing?.status ?? "ready", existing?.archived ?? false, link),
       )
         .catch(() => {});
     }

@@ -1,3 +1,4 @@
+import type { ArticleStatus } from "@clipfeed/shared/types";
 import type { HtmlSource } from "./payload.ts";
 
 // Runtime messages sent from popup.tsx to background.ts. Background owns all
@@ -18,6 +19,11 @@ export type SaveResult =
     articleId: string | null;
     htmlSource: HtmlSource;
     serverOrigin: string;
+    // Task 55: only meaningful when alreadySaved is true — the existing
+    // article's state, so the popup can name it ("already in your feed" /
+    // "archived" / "failed") instead of a bare "Already saved".
+    duplicateStatus?: ArticleStatus;
+    duplicateArchived?: boolean;
   }
   | { ok: false; errorCategory: SaveErrorCategory; message: string };
 

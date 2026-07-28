@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import type {
   ArticleListItem,
+  DuplicateArticleResponse,
   PublicArticle,
   SearchResultItem,
   SummaryJson,
@@ -125,6 +126,17 @@ const sampleSearchResultItem: SearchResultItem = {
 
 Deno.test("openapi drift: SearchResultItem required fields match the real shared type", () => {
   assertRequiredFieldsExist("SearchResultItem", sampleSearchResultItem);
+});
+
+const sampleDuplicateArticleResponse: DuplicateArticleResponse = {
+  id: "a1",
+  error: "duplicate",
+  status: "ready",
+  archived: false,
+};
+
+Deno.test("openapi drift: DuplicateArticleResponse required fields match the real shared type", () => {
+  assertRequiredFieldsExist("DuplicateArticleResponse", sampleDuplicateArticleResponse);
 });
 
 // ErrorResponse has no corresponding shared/src/types.ts interface — every

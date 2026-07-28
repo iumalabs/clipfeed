@@ -124,6 +124,9 @@ export interface Dictionary {
   filtersSearchPlaceholder: string;
   filtersTagsHeading: string;
   filtersShowAllLabel: string;
+  duplicateRevealReadyToast: string;
+  duplicateRevealArchivedToast: string;
+  duplicateRevealFailedToast: string;
 }
 
 const ru: Dictionary = {
@@ -250,6 +253,9 @@ const ru: Dictionary = {
   filtersSearchPlaceholder: "Найти тег или источник",
   filtersTagsHeading: "Теги",
   filtersShowAllLabel: "показать все",
+  duplicateRevealReadyToast: "Эта статья уже в ленте",
+  duplicateRevealArchivedToast: "Статья в архиве",
+  duplicateRevealFailedToast: "Эта статья не обработалась — можно повторить",
 };
 
 const en: Dictionary = {
@@ -378,6 +384,9 @@ const en: Dictionary = {
   filtersSearchPlaceholder: "Find a tag or source",
   filtersTagsHeading: "Tags",
   filtersShowAllLabel: "show all",
+  duplicateRevealReadyToast: "Already in your feed",
+  duplicateRevealArchivedToast: "This article is archived",
+  duplicateRevealFailedToast: "This article failed — you can retry",
 };
 
 export const dictionaries: Record<Lang, Dictionary> = { ru, en };

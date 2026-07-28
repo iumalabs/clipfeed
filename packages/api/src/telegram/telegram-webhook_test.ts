@@ -505,7 +505,58 @@ Deno.test("webhook: duplicate URL -> immediate 'already saved' edit, no second p
 
     assertEquals(db.rows.length, 1); // no second row inserted
     const editCall = stub.telegramCalls.find((c) => c.method === "editMessageText");
-    assertEquals(editCall!.body.text, "Уже сохранено");
+    // Task 55: names the existing article's state — this one finished
+    // processing (status 'ready', never archived) between the two
+    // requests, and PUBLIC_BASE_URL is unset in this test env, so no card
+    // link is appended.
+    assertEquals(editCall!.body.text, "Уже сохранено — статья уже в ленте.");
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("webhook: duplicate URL for an archived article names 'в архиве' and includes the card link when PUBLIC_BASE_URL is set", async () => {
+  const stub = stubFetch();
+  try {
+    const env = makeEnv({ PUBLIC_BASE_URL: "https://feed.example.com" });
+    const { ctx, settle } = makeExecutionContext();
+
+    await webhookRequest(env, ctx, messageUpdate({ text: "https://example.com/tg-dup-archived" }));
+    await settle();
+    const db = env.DB as FakeD1;
+    db.rows[0].archived = 1;
+
+    stub.telegramCalls.length = 0;
+    await webhookRequest(env, ctx, messageUpdate({ text: "https://example.com/tg-dup-archived" }));
+    await settle();
+
+    const editCall = stub.telegramCalls.find((c) => c.method === "editMessageText");
+    assertEquals(
+      editCall!.body.text,
+      `Уже сохранено — статья в архиве.\n\nhttps://feed.example.com/a/${db.rows[0].id}`,
+    );
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("webhook: duplicate URL for a failed article names 'не обработалась'", async () => {
+  const stub = stubFetch();
+  try {
+    const env = makeEnv({ DAILY_SUMMARY_LIMIT: 0 });
+    const { ctx, settle } = makeExecutionContext();
+
+    await webhookRequest(env, ctx, messageUpdate({ text: "https://example.com/tg-dup-failed" }));
+    await settle();
+    const db = env.DB as FakeD1;
+    assertEquals(db.rows[0].status, "failed");
+
+    stub.telegramCalls.length = 0;
+    await webhookRequest(env, ctx, messageUpdate({ text: "https://example.com/tg-dup-failed" }));
+    await settle();
+
+    const editCall = stub.telegramCalls.find((c) => c.method === "editMessageText");
+    assertEquals(editCall!.body.text, "Уже сохранено — статья не обработалась — можно повторить.");
   } finally {
     stub.restore();
   }

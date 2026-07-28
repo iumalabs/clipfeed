@@ -1,5 +1,10 @@
 import "./chrome.d.ts";
-import type { AddedVia, CreateArticleRequest, CreateArticleResponse } from "@clipfeed/shared/types";
+import type {
+  AddedVia,
+  CreateArticleRequest,
+  CreateArticleResponse,
+  DuplicateArticleResponse,
+} from "@clipfeed/shared/types";
 import { buildAuthHeaders } from "./lib/auth.ts";
 import { getStoredConfig, type StoredConfig } from "./lib/config.ts";
 import type { HtmlSource } from "./lib/payload.ts";
@@ -78,7 +83,7 @@ async function postArticle(
   }
 
   if (response.status === 409) {
-    const data = await response.json().catch(() => null) as CreateArticleResponse | null;
+    const data = await response.json().catch(() => null) as DuplicateArticleResponse | null;
     await setBadgeSuccess();
     return {
       ok: true,
@@ -86,6 +91,8 @@ async function postArticle(
       articleId: data?.id ?? null,
       htmlSource,
       serverOrigin: config.serverOrigin,
+      duplicateStatus: data?.status,
+      duplicateArchived: data?.archived,
     };
   }
 

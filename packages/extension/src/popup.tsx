@@ -1,8 +1,10 @@
 import "./chrome.d.ts";
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
+import type { ArticleStatus } from "@clipfeed/shared/types";
 import { parseTags } from "./lib/tags.ts";
 import { getStoredConfig } from "./lib/config.ts";
+import { duplicateSavedLabel } from "./lib/duplicateLabel.ts";
 import type { CheckSelectionResult, SaveErrorCategory, SaveResult } from "./lib/messages.ts";
 import type { HtmlSource } from "./lib/payload.ts";
 import "./shared.css";
@@ -53,6 +55,8 @@ function PopupApp() {
   const [savedArticleId, setSavedArticleId] = useState<string | null>(null);
   const [savedHtmlSource, setSavedHtmlSource] = useState<HtmlSource>("full");
   const [alreadySaved, setAlreadySaved] = useState(false);
+  const [duplicateStatus, setDuplicateStatus] = useState<ArticleStatus>("ready");
+  const [duplicateArchived, setDuplicateArchived] = useState(false);
   const [serverOrigin, setServerOrigin] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [errorCategory, setErrorCategory] = useState<SaveErrorCategory>("network");
@@ -105,6 +109,8 @@ function PopupApp() {
       setSavedArticleId(result.articleId);
       setSavedHtmlSource(result.htmlSource);
       setAlreadySaved(result.alreadySaved);
+      setDuplicateStatus(result.duplicateStatus ?? "ready");
+      setDuplicateArchived(result.duplicateArchived ?? false);
       setServerOrigin(result.serverOrigin);
       setState("saved");
     } else {
@@ -216,7 +222,9 @@ function PopupApp() {
         {state === "saved" && (
           <div class="popup-card popup-card--ok">
             <p class="popup-card-title">
-              {alreadySaved ? "Already saved" : "Saved — summary in ~10s"}
+              {alreadySaved
+                ? duplicateSavedLabel(duplicateStatus, duplicateArchived)
+                : "Saved — summary in ~10s"}
             </p>
             {savedHtmlSource === "none" && (
               <p class="popup-card-hint">

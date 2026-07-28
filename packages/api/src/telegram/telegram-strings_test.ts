@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import {
   agentAlreadyRanWarning,
+  alreadySavedText,
   digestHeader,
   failedText,
   readySuccessText,
@@ -48,5 +49,37 @@ Deno.test("agentAlreadyRanWarning: names the picks count and UTC clock time, sta
   assertEquals(
     agentAlreadyRanWarning(10, "05:00"),
     "Сегодня агент уже отработал: 10 статей в 05:00 UTC. Запускаю ещё раз.",
+  );
+});
+
+// --- alreadySavedText (Task 55) ---
+
+Deno.test("alreadySavedText: ready and not archived names 'уже в ленте', no link when null", () => {
+  assertEquals(alreadySavedText("ready", false, null), "Уже сохранено — статья уже в ленте.");
+});
+
+Deno.test("alreadySavedText: archived takes priority over status", () => {
+  assertEquals(alreadySavedText("ready", true, null), "Уже сохранено — статья в архиве.");
+  assertEquals(alreadySavedText("failed", true, null), "Уже сохранено — статья в архиве.");
+});
+
+Deno.test("alreadySavedText: failed and not archived names 'не обработалась'", () => {
+  assertEquals(
+    alreadySavedText("failed", false, null),
+    "Уже сохранено — статья не обработалась — можно повторить.",
+  );
+});
+
+Deno.test("alreadySavedText: pending and not archived names 'ещё обрабатывается'", () => {
+  assertEquals(
+    alreadySavedText("pending", false, null),
+    "Уже сохранено — статья ещё обрабатывается.",
+  );
+});
+
+Deno.test("alreadySavedText: appends the card link on its own line when given", () => {
+  assertEquals(
+    alreadySavedText("ready", false, "https://example.com/a/abc123"),
+    "Уже сохранено — статья уже в ленте.\n\nhttps://example.com/a/abc123",
   );
 });
