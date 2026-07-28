@@ -86,9 +86,13 @@ Two layers, both required to run cleanly before opening a PR:
 
 ### Git hooks
 
-Not active by default — run `deno task hooks:install` once per clone
-(`git config core.hooksPath
-scripts/git-hooks`). This makes `git commit` run
+Activated automatically — `deno task dev` and `deno task setup` both run `scripts/ensure-hooks.ts`
+first, which sets `core.hooksPath` to `scripts/git-hooks` the first time either task runs in a clone
+(`git config
+core.hooksPath scripts/git-hooks`). This is idempotent and never clobbers a
+`core.hooksPath` you've already pointed elsewhere on purpose — it only acts when the setting is
+unset. Run `deno task hooks:install` directly if you need to (re-)activate it without going through
+`dev`/`setup` (e.g. right after switching `core.hooksPath` back). Once active, `git commit` runs
 `scripts/git-hooks/pre-commit`, which blocks the commit on the first failing step:
 `deno fmt --check`, `deno lint`, `deno task test`, then `deno task
 e2e`. Set `SKIP_E2E_HOOK=1` in
