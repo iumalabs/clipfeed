@@ -7,11 +7,15 @@ export interface FooterProps {
   // invalid REPO_URL) renders the license label as plain text instead of
   // a link, rather than pointing at a hardcoded, owner-specific repo.
   repoUrl: string | null;
+  // Task 56.5: same telegram_channel_url the header icon and sidebar/
+  // filter-sheet banner use — one source of truth, so all three appear
+  // or hide together. null omits this footer item entirely.
+  telegramChannelUrl: string | null;
 }
 
 // Copyright year is read at render time (not baked in at build time) so a
 // long-lived deployment never shows a stale year.
-export function Footer({ dict, repoUrl }: FooterProps) {
+export function Footer({ dict, repoUrl, telegramChannelUrl }: FooterProps) {
   const year = new Date().getFullYear();
   const licenseUrl = repoUrl ? `${repoUrl}/blob/main/LICENSE` : null;
 
@@ -27,6 +31,14 @@ export function Footer({ dict, repoUrl }: FooterProps) {
         {dict.footerContentNotice}
         <span class="app-footer-sep" aria-hidden="true">·</span>
         <a href="/bot">{dict.footerBotLinkLabel}</a>
+        {telegramChannelUrl && (
+          <>
+            <span class="app-footer-sep" aria-hidden="true">·</span>
+            <a href={telegramChannelUrl} target="_blank" rel="noopener noreferrer">
+              {dict.footerTelegramLinkLabel}
+            </a>
+          </>
+        )}
       </p>
     </footer>
   );

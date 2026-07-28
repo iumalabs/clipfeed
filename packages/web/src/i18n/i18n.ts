@@ -7,6 +7,7 @@ export interface Dictionary {
   searchPlaceholder: string;
   themeToggleAria: string;
   githubLinkAria: string;
+  telegramLinkAria: string;
   scrollToTopAria: string;
   langToggleAriaRu: string;
   langToggleAriaEn: string;
@@ -116,6 +117,7 @@ export interface Dictionary {
   footerLicenseLabel: string;
   footerContentNotice: string;
   footerBotLinkLabel: string;
+  footerTelegramLinkLabel: string;
   backToFeedLink: string;
   resetFiltersAction: string;
   preparingEnglishLabel: string;
@@ -137,6 +139,7 @@ const ru: Dictionary = {
   searchPlaceholder: "Поиск",
   themeToggleAria: "Переключить тему",
   githubLinkAria: "Исходный код на GitHub",
+  telegramLinkAria: "Telegram-канал",
   scrollToTopAria: "Наверх",
   langToggleAriaRu: "Переключить на русский",
   langToggleAriaEn: "Переключить на английский",
@@ -248,6 +251,7 @@ const ru: Dictionary = {
   footerLicenseLabel: "код под MIT",
   footerContentNotice: "Выжимки созданы ИИ. Права на исходные статьи принадлежат их авторам.",
   footerBotLinkLabel: "про бота",
+  footerTelegramLinkLabel: "Telegram",
   backToFeedLink: "показать всю ленту",
   resetFiltersAction: "Сбросить фильтры",
   preparingEnglishLabel: "Готовим английскую версию…",
@@ -269,6 +273,7 @@ const en: Dictionary = {
   searchPlaceholder: "Search",
   themeToggleAria: "Toggle theme",
   githubLinkAria: "Source code on GitHub",
+  telegramLinkAria: "Telegram channel",
   scrollToTopAria: "Back to top",
   langToggleAriaRu: "Switch to Russian",
   langToggleAriaEn: "Switch to English",
@@ -382,6 +387,7 @@ const en: Dictionary = {
   footerContentNotice:
     "Summaries are AI-generated. Rights to the source articles belong to their authors.",
   footerBotLinkLabel: "about this bot",
+  footerTelegramLinkLabel: "Telegram",
   backToFeedLink: "back to feed",
   resetFiltersAction: "Reset filters",
   preparingEnglishLabel: "Preparing English version…",
