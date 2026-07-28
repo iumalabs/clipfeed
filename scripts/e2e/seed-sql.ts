@@ -48,6 +48,7 @@ interface ArticleRow {
   error?: string | null;
   fail_class?: string | null;
   en_generated_at?: string | null;
+  archived?: boolean;
 }
 
 function summaryFor(title: string, tldr: string): Record<string, unknown> {
@@ -87,7 +88,7 @@ function insertStatement(row: ArticleRow): string {
     sqlString(row.added_at),
     sqlString(row.added_via),
     sqlString(row.status),
-    "0",
+    row.archived ? "1" : "0",
     sqlJson(row.tags),
     row.summary_ru ? sqlString(row.summary_ru) : "NULL",
     summaryJson ? sqlJson(summaryJson) : "NULL",
@@ -326,6 +327,65 @@ function deepLinkRows(): ArticleRow[] {
   ];
 }
 
+// --- Group 6: duplicate-add reveal (Task 55) ---
+// Three rows, one per reveal state the SPA's handleAdd must distinguish on
+// a duplicate 409: ready (not archived), archived, and failed — each its
+// own URL so a real POST /api/admin/articles re-add of that exact URL is
+// the trigger, same as a live duplicate hit.
+const DUPADD_SOURCE = "e2e-dupadd.example.com";
+const DUPADD_TAG = "e2e-dupadd";
+export const DUPADD_READY_URL = `https://${DUPADD_SOURCE}/ready`;
+export const DUPADD_ARCHIVED_URL = `https://${DUPADD_SOURCE}/archived`;
+export const DUPADD_FAILED_URL = `https://${DUPADD_SOURCE}/failed`;
+export const DUPADD_READY_ID = "e2e-dupadd-ready";
+export const DUPADD_ARCHIVED_ID = "e2e-dupadd-archived";
+export const DUPADD_FAILED_ID = "e2e-dupadd-failed";
+
+function duplicateAddRows(): ArticleRow[] {
+  return [
+    {
+      id: DUPADD_READY_ID,
+      url: DUPADD_READY_URL,
+      title: "Duplicate-add ready article",
+      source: DUPADD_SOURCE,
+      added_at: isoMinutesAgo(3960),
+      added_via: "manual",
+      status: "ready",
+      tags: [DUPADD_TAG],
+      summary_json: summaryFor("Duplicate-add ready article", "Готовая статья для теста дублей."),
+      summary_ru: "Готовая статья для теста дублей.",
+    },
+    {
+      id: DUPADD_ARCHIVED_ID,
+      url: DUPADD_ARCHIVED_URL,
+      title: "Duplicate-add archived article",
+      source: DUPADD_SOURCE,
+      added_at: isoMinutesAgo(3965),
+      added_via: "manual",
+      status: "ready",
+      tags: [DUPADD_TAG],
+      summary_json: summaryFor(
+        "Duplicate-add archived article",
+        "Архивная статья для теста дублей.",
+      ),
+      summary_ru: "Архивная статья для теста дублей.",
+      archived: true,
+    },
+    {
+      id: DUPADD_FAILED_ID,
+      url: DUPADD_FAILED_URL,
+      title: "Duplicate-add failed article",
+      source: DUPADD_SOURCE,
+      added_at: isoMinutesAgo(3970),
+      added_via: "manual",
+      status: "failed",
+      tags: [DUPADD_TAG],
+      error: "internal: extract: fetch failed with status 500",
+      fail_class: "transient",
+    },
+  ];
+}
+
 export function buildSeedSql(): string {
   const rows = [
     ...paginationRows(),
@@ -333,6 +393,7 @@ export function buildSeedSql(): string {
     ...ownerVisitorRows(),
     ...searchRows(),
     ...deepLinkRows(),
+    ...duplicateAddRows(),
   ];
   return [
     "DELETE FROM articles;",

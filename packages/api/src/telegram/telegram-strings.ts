@@ -2,6 +2,8 @@
 // module so every other Telegram-related file can stay English-only for
 // its code and comments.
 
+import type { ArticleStatus } from "@clipfeed/shared/types";
+
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 
 function truncateToTelegramLimit(text: string): string {
@@ -17,7 +19,28 @@ export const HELP_TEXT =
 
 export const SAVING_TEXT = "Сохраняю…";
 
-export const ALREADY_SAVED_TEXT = "Уже сохранено";
+// Task 55: names the existing article's state instead of a bare "already
+// saved" — a duplicate hit used to be a dead end (the owner couldn't tell
+// whether the exact match was ready, archived, or had failed processing
+// entirely). `cardLink` is the "/a/<id>" card URL (built by the caller via
+// telegram-post.ts's cardUrl) — omitted when PUBLIC_BASE_URL isn't
+// configured, same graceful-degradation rule the publish flow already uses.
+export function alreadySavedText(
+  status: ArticleStatus,
+  archived: boolean,
+  cardLink: string | null,
+): string {
+  const state = archived
+    ? "статья в архиве"
+    : status === "failed"
+    ? "статья не обработалась — можно повторить"
+    : status === "pending"
+    ? "статья ещё обрабатывается"
+    : "статья уже в ленте";
+  const lines = [`Уже сохранено — ${state}.`];
+  if (cardLink) lines.push("", cardLink);
+  return truncateToTelegramLimit(lines.join("\n"));
+}
 
 // Task 48: shown when a Telegram-submitted URL's robots.txt disallows a
 // generic bot fetch — the owner can resend the same link with "force"

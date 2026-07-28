@@ -323,9 +323,18 @@ app.get("/api/articles/counts", async (c) => {
 // pending/failed row 404s here too, same reasoning as the list route above
 // — a visitor fetching a specific id (e.g. a stale bookmark) must not learn
 // that an article exists but hasn't finished (or failed) processing.
+// Task 55: archived also 404s here — the list route only ever excludes
+// archived rows because the SPA's own visitor-mode fetch always sends
+// `archived=0` explicitly; this single-id lookup takes no such param, so it
+// needs its own check to keep an archived row exactly as invisible to a
+// visitor guessing/bookmarking its exact id (including via /a/:id, which
+// resolves through this same route client-side) as it already is in the
+// normal feed.
 app.get("/api/articles/:id", async (c) => {
   const article = await getArticleById(c.env.DB, c.req.param("id"));
-  if (!article || article.status !== "ready") return c.json({ error: "not found" }, 404);
+  if (!article || article.status !== "ready" || article.archived) {
+    return c.json({ error: "not found" }, 404);
+  }
   return c.json(toPublicArticle(article));
 });
 
@@ -347,10 +356,16 @@ app.get("/a/:id", async (c) => {
 
   const article = await getArticleById(c.env.DB, id);
   const publicBaseUrl = (c.env.PUBLIC_BASE_URL ?? "").trim();
-  // Unknown id, not yet summarized, or PUBLIC_BASE_URL unset (og:url has
-  // nowhere valid to point) — the plain shell is never wrong, just less
-  // informative; the SPA itself still handles the id once it boots.
-  if (!article || article.status !== "ready" || !article.summary_json || !publicBaseUrl) {
+  // Unknown id, not yet summarized, archived, or PUBLIC_BASE_URL unset
+  // (og:url has nowhere valid to point) — the plain shell is never wrong,
+  // just less informative; the SPA itself still handles the id once it
+  // boots. Task 55: archived is excluded here too, matching GET
+  // /api/articles/:id — a crawler must not learn an archived article's
+  // title/tldr via OG tags any more than a visitor can fetch its JSON.
+  if (
+    !article || article.status !== "ready" || article.archived || !article.summary_json ||
+    !publicBaseUrl
+  ) {
     return plainShell();
   }
 
@@ -532,8 +547,14 @@ app.post("/api/admin/articles", async (c) => {
 
   const existingId = await findArticleIdByUrl(c.env.DB, url);
   if (existingId) {
+    const existing = await getArticleById(c.env.DB, existingId);
     return c.json(
-      { id: existingId, error: "duplicate" } satisfies DuplicateArticleResponse,
+      {
+        id: existingId,
+        error: "duplicate",
+        status: existing?.status ?? "ready",
+        archived: existing?.archived ?? false,
+      } satisfies DuplicateArticleResponse,
       409,
     );
   }
@@ -551,10 +572,13 @@ app.post("/api/admin/articles", async (c) => {
     const normalizedTitle = normalizeTitleExact(title);
     const similar = recentRows.find((row) => normalizeTitleExact(row.title) === normalizedTitle);
     if (similar) {
+      const existing = await getArticleById(c.env.DB, similar.id);
       return c.json(
         {
           id: similar.id,
           error: "duplicate",
+          status: existing?.status ?? "ready",
+          archived: existing?.archived ?? false,
           reason: "similar_title",
         } satisfies DuplicateArticleResponse,
         409,

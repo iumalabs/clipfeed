@@ -320,7 +320,58 @@ Deno.test("POST /api/admin/articles: rejects duplicate url with 409 and the exis
     );
     assertEquals(second.status, 409);
     const body = await second.json();
-    assertEquals(body.id, id);
+    // Task 55: the 409 carries the existing article's state too, so a
+    // caller can locate/reveal it instead of dead-ending — this one
+    // finished processing (via settle() above) and was never archived.
+    assertEquals(body, { id, error: "duplicate", status: "ready", archived: false });
+  } finally {
+    restoreFetch();
+  }
+});
+
+Deno.test("POST /api/admin/articles: duplicate 409 reports archived: true for an archived existing article", async () => {
+  const restoreFetch = stubFetch();
+  const { env, authHeaders } = await makeOwnerContext();
+  const { ctx, settle } = makeExecutionContext();
+
+  try {
+    const first = await app.request(
+      "/api/admin/articles",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authHeaders },
+        body: JSON.stringify({ url: "https://example.com/dup-archived" }),
+      },
+      env,
+      ctx,
+    );
+    const { id } = await first.json();
+    await settle();
+
+    await app.request(
+      `/api/admin/articles/${id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json", ...authHeaders },
+        body: JSON.stringify({ archived: true }),
+      },
+      env,
+      ctx,
+    );
+
+    const second = await app.request(
+      "/api/admin/articles",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authHeaders },
+        body: JSON.stringify({ url: "https://example.com/dup-archived" }),
+      },
+      env,
+      ctx,
+    );
+    assertEquals(second.status, 409);
+    const body = await second.json();
+    assertEquals(body, { id, error: "duplicate", status: "ready", archived: true });
   } finally {
     restoreFetch();
   }
@@ -372,7 +423,16 @@ Deno.test("POST /api/admin/articles: a different URL with a normalized-identical
   );
   assertEquals(second.status, 409);
   const body = await second.json();
-  assertEquals(body, { id, error: "duplicate", reason: "similar_title" });
+  // JOBS is configured and settle() was never awaited above, so the first
+  // article is still 'pending' (never archived) when the second request's
+  // duplicate check runs.
+  assertEquals(body, {
+    id,
+    error: "duplicate",
+    status: "pending",
+    archived: false,
+    reason: "similar_title",
+  });
 });
 
 Deno.test("POST /api/admin/articles: a merely-similar (Jaccard, not exact) title is NOT blocked — manual adds are exact-title-only", async () => {
@@ -864,6 +924,28 @@ Deno.test("GET /a/:id: a non-ready article (pending/failed) serves the plain she
   const res = await app.request("/a/pending-1", {}, env, ctx);
   const html = await res.text();
   assertEquals(html.includes("og:title"), false);
+});
+
+Deno.test("GET /a/:id: an archived (but ready) article serves the plain shell — Task 55, a crawler must not learn its title/tldr either", async () => {
+  const { env, ctx } = {
+    env: makeEnv({
+      ASSETS: assetsStub(FAKE_SHELL_HTML),
+      PUBLIC_BASE_URL: "https://clipfeed.example.com",
+    }),
+    ...makeExecutionContext(),
+  };
+  const db = env.DB as unknown as FakeD1;
+  db.rows.push(readyRow({
+    id: "archived-1",
+    summary_json: JSON.stringify({ title_ru: "Заголовок статьи", tldr_ru: "Краткое описание." }),
+    archived: 1,
+  }));
+
+  const res = await app.request("/a/archived-1", {}, env, ctx);
+  assertEquals(res.status, 200);
+  const html = await res.text();
+  assertEquals(html.includes("og:title"), false);
+  assertEquals(html.includes("<!--OG-->"), true);
 });
 
 Deno.test("GET /a/:id: an unset PUBLIC_BASE_URL serves the plain shell rather than a relative/malformed og:url", async () => {

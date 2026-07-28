@@ -50,6 +50,11 @@ import { loadRepoUrl } from "./lib/api/repoConfig.ts";
 import { classifyApiError, localizedErrorMessage } from "./lib/api/errorMessages.ts";
 import { mergeRefreshedArticles, pickFailedIds } from "./lib/feed/failedRefresh.ts";
 import { isArticleInList, parseDeepLinkId } from "./lib/feed/deepLink.ts";
+import {
+  classifyDuplicateState,
+  duplicateRevealMessage,
+  extractDuplicateInfo,
+} from "./lib/feed/duplicateReveal.ts";
 import { applyFeedPollSnapshot, feedPollDelayMs, hasPendingArticles } from "./lib/feed/feedPoll.ts";
 import { translateQueue } from "./lib/content/translateQueue.ts";
 import { Header } from "./components/Header.tsx";
@@ -654,6 +659,18 @@ export function App() {
     clearDeepLinkUrl();
   };
 
+  // Task 55: reveals an existing article by re-entering the exact same
+  // deep-link resolution the app already runs for a "/a/<id>" page load —
+  // if the id happens to already be in the loaded feed, that effect
+  // expands it in place (scrolled into view, its date section forced
+  // open); otherwise it fetches it standalone for the single-card view.
+  // Used by handleAdd below when a duplicate 409 names the existing
+  // article instead of erroring.
+  const revealDeepLink = (id: string) => {
+    if (globalThis.location) history.replaceState(null, "", `/a/${id}`);
+    setDeepLinkPending(id);
+  };
+
   const handleShowMore = async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
@@ -744,6 +761,18 @@ export function App() {
       setModalOpen(false);
       refreshFailedArticles();
     } catch (err) {
+      // Task 55: a duplicate 409 used to be a dead end (a bare error toast
+      // even though the server always knows exactly which article it
+      // duplicates) — close the dialog and reveal the existing article
+      // instead, with a toast naming its state (ready/archived/failed)
+      // rather than a generic error.
+      const duplicate = extractDuplicateInfo(err);
+      if (duplicate) {
+        setModalOpen(false);
+        revealDeepLink(duplicate.id);
+        setToastMessage(duplicateRevealMessage(dict, classifyDuplicateState(duplicate)));
+        return;
+      }
       showError(err);
     }
   };

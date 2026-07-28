@@ -194,9 +194,19 @@ export interface CreateArticleResponse {
 // signals which case it is). `reason` is omitted for the exact-URL case to
 // stay backward compatible with existing 409 consumers that only look at
 // `id`.
+//
+// Task 55: `status`/`archived` were added so a duplicate hit can be
+// resolved to "where is it" instead of a dead-end error — the existing
+// article may be archived (auto-archive from healing/faithfulness),
+// failed (hidden from the default ready-only feed), or just buried deep
+// in "Ранее"/"Earlier". Every add path (manual/extension via this
+// endpoint, and Telegram's own separate exact-URL check) fills both
+// fields from the same existing row so a caller never has to guess.
 export interface DuplicateArticleResponse {
   id: string;
   error: "duplicate";
+  status: ArticleStatus;
+  archived: boolean;
   reason?: "similar_title";
 }
 

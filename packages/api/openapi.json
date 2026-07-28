@@ -374,7 +374,7 @@
       },
       "DuplicateArticleResponse": {
         "type": "object",
-        "required": ["id", "error"],
+        "required": ["id", "error", "status", "archived"],
         "properties": {
           "id": {
             "type": "string",
@@ -382,6 +382,14 @@
             "description": "The id of the existing article this duplicates."
           },
           "error": { "type": "string", "enum": ["duplicate"] },
+          "status": {
+            "$ref": "#/components/schemas/ArticleStatus",
+            "description": "The existing article's current status — lets a caller tell a duplicate hit apart from a dead end: the existing article may be pending, ready, or failed."
+          },
+          "archived": {
+            "type": "boolean",
+            "description": "Whether the existing article is archived (e.g. auto-archived by the healing job) — archived articles are hidden from the default feed view."
+          },
           "reason": {
             "type": "string",
             "enum": ["similar_title"],
@@ -908,7 +916,7 @@
       "get": {
         "tags": ["public"],
         "summary": "Get one article (public)",
-        "description": "Task 41 Part D: 404s for a pending or failed article, same as a missing id — a visitor must not be able to learn that an article exists but hasn't finished (or failed) processing. The owner-only GET /api/admin/articles/{id} is unaffected.",
+        "description": "Task 41 Part D: 404s for a pending or failed article, same as a missing id — a visitor must not be able to learn that an article exists but hasn't finished (or failed) processing. Task 55: also 404s for an archived article, so it's exactly as invisible by direct id (including via /a/{id}) as it already is in the normal feed. The owner-only GET /api/admin/articles/{id} is unaffected.",
         "operationId": "getPublicArticle",
         "parameters": [{ "$ref": "#/components/parameters/ArticleId" }],
         "responses": {

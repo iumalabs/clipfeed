@@ -1546,6 +1546,54 @@ Deno.test("public GET /api/articles/:id: 404 for a failed article (Task 41 Part 
   }
 });
 
+Deno.test("public GET /api/articles/:id: 404 for a ready but archived article (Task 55 — an archived row must be exactly as invisible to a visitor by direct id as it already is in the normal feed)", async () => {
+  const { env, authHeaders } = await makeOwnerContext();
+  const { ctx, settle } = makeExecutionContext();
+  const restoreFetch = stubFetch();
+
+  try {
+    const created = await (
+      await app.request(
+        "/api/admin/articles",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", ...authHeaders },
+          body: JSON.stringify({ url: "https://example.com/hygiene-archived" }),
+        },
+        env,
+        ctx,
+      )
+    ).json();
+    await settle();
+
+    await app.request(
+      `/api/admin/articles/${created.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json", ...authHeaders },
+        body: JSON.stringify({ archived: true }),
+      },
+      env,
+      ctx,
+    );
+
+    const publicRes = await app.request(`/api/articles/${created.id}`, {}, env, ctx);
+    assertEquals(publicRes.status, 404);
+
+    const adminRes = await app.request(
+      `/api/admin/articles/${created.id}`,
+      { headers: authHeaders },
+      env,
+      ctx,
+    );
+    const adminArticle = await adminRes.json();
+    assertEquals(adminArticle.status, "ready");
+    assertEquals(adminArticle.archived, true);
+  } finally {
+    restoreFetch();
+  }
+});
+
 Deno.test("public GET /api/articles/:id: has_error is false and full_text/error are absent for a ready article", async () => {
   const { env, authHeaders } = await makeOwnerContext();
   const { ctx, settle } = makeExecutionContext();
