@@ -638,6 +638,20 @@ ul {
   opacity: 0.9;
 }
 
+/* Task 57: secondary "open in browser" fallback for browsers that refuse
+   Telegram's tg:// app-handoff scheme (e.g. Brave on iOS) — deliberately
+   quieter than the primary CTA: no gradient, muted color, no pill/button
+   chrome, just a small underlined link. */
+.telegram-banner-webfallback {
+  color: var(--mut);
+  font-size: 0.72rem;
+  text-decoration: underline;
+}
+
+.telegram-banner-webfallback:hover {
+  color: var(--acc);
+}
+
 /* --- Feed --- */
 
 .feed-sections {

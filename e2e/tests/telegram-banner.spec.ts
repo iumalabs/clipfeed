@@ -23,6 +23,15 @@ test.describe("desktop sidebar", () => {
     await expect(link).toHaveAttribute("target", "_blank");
     await expect(link).toHaveAttribute("rel", "noopener noreferrer");
     await expect(link).toHaveAttribute("href", /^https:\/\/t\.me\//);
+
+    // Task 57: the secondary "open in browser" link — https://t.me/s/<name>
+    // — never attempts Telegram's app handoff (see
+    // lib/api/telegramConfig.ts's deriveTelegramWebPreviewUrl doc comment
+    // for the investigation behind this).
+    const fallback = banner.locator("a.telegram-banner-webfallback");
+    await expect(fallback).toHaveAttribute("target", "_blank");
+    await expect(fallback).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(fallback).toHaveAttribute("href", /^https:\/\/t\.me\/s\//);
   });
 });
 
@@ -44,6 +53,23 @@ test.describe("mobile filter sheet", () => {
     // direct children.
     const lastChild = sheet.locator(":scope > *").last();
     await expect(lastChild).toHaveClass(/telegram-banner/);
+  });
+
+  // Task 57: on mobile, the "open in browser" fallback matters most — this
+  // is where the tg:// app-handoff dead-end (Brave on iOS) was reproduced.
+  test("shows both the primary Subscribe link and the open-in-browser fallback", async ({ page }) => {
+    await installFixedClock(page);
+    await page.goto("/");
+
+    await page.locator(".filters-button").click();
+    const banner = page.locator('.filter-sheet[role="dialog"] .telegram-banner');
+    await expect(banner).toBeVisible();
+
+    await expect(banner.locator("a.telegram-banner-button")).toHaveAttribute("href", /^https:\/\/t\.me\//);
+    await expect(banner.locator("a.telegram-banner-webfallback")).toHaveAttribute(
+      "href",
+      /^https:\/\/t\.me\/s\//,
+    );
   });
 });
 

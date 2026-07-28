@@ -86,3 +86,25 @@ Deno.test("TelegramBanner: renders null when telegramChannelUrl is null", () => 
   const vnode = TelegramBanner({ dict, telegramChannelUrl: null });
   assertEquals(vnode, null);
 });
+
+// Task 57: the banner's second, explicit "open in browser" path — must be
+// derived from and gated on the exact same telegramChannelUrl as the
+// primary link (see lib/api/telegramConfig.ts's deriveTelegramWebPreviewUrl).
+Deno.test("TelegramBanner: renders both the primary and web-preview links when telegramChannelUrl is set", () => {
+  const vnode = TelegramBanner({ dict, telegramChannelUrl: "https://t.me/example" });
+  const primary = findVNode(
+    vnode,
+    (n) => n.type === "a" && n.props?.href === "https://t.me/example",
+  );
+  const fallback = findVNode(
+    vnode,
+    (n) => n.type === "a" && n.props?.href === "https://t.me/s/example",
+  );
+  assertEquals(primary !== null, true);
+  assertEquals(fallback !== null, true);
+});
+
+Deno.test("TelegramBanner: omits both links when telegramChannelUrl is null", () => {
+  const vnode = TelegramBanner({ dict, telegramChannelUrl: null });
+  assertEquals(vnode, null);
+});
