@@ -1130,7 +1130,7 @@ export async function listArticles(
 // Task 51: params for the COUNT-only companion to listArticles — same
 // filter shape (minus cursor/limit, which are pagination concerns a counts
 // query has no use for), plus the two local-calendar-day boundaries the
-// caller computed CLIENT-SIDE (see packages/web/src/lib/dayBoundaries.ts).
+// caller computed CLIENT-SIDE (see packages/web/src/lib/feed/dayBoundaries.ts).
 // D1 has no timezone concept, so bucketing here is deliberately just a
 // plain ISO-string comparison against boundaries the browser already
 // worked out in ITS OWN local time — the server never guesses at "today".

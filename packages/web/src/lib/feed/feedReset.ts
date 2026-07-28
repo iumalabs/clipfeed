@@ -1,4 +1,4 @@
-import type { SearchMode } from "./searchMode.ts";
+import type { SearchMode } from "../search/searchMode.ts";
 
 // What the logo click resets, besides the filter reducer's own "clear-all"
 // (tag/source/query) — see App.tsx's handleLogoClick. Section open/closed

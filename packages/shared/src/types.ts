@@ -38,7 +38,7 @@ export type FailureClass = "transient" | "permanent" | "unknown" | "content";
 // in summarize.ts), but rows saved before this field existed have no body_ru
 // in their stored JSON at all — callers reading summary_json back out of D1
 // must not assume this array is present (see selectSummaryFields in
-// packages/web/src/lib/summaryFields.ts for the defensive read); there's no
+// packages/web/src/lib/content/summaryFields.ts for the defensive read); there's no
 // migration backfilling old rows.
 //
 // Task 35 Part A ("Russian-first"): the *_en fields are no longer generated
@@ -233,9 +233,9 @@ export interface PublicArticleListResponse {
 // "Earlier" section header (and the sidebar total) to show the TRUE total
 // without fetching every row (which would defeat lazy loading). Bucketing
 // must agree with the SPA's own local-calendar-day logic (bucketSection in
-// packages/web/src/lib/dateGrouping.ts) — since D1 has no timezone concept,
+// packages/web/src/lib/feed/dateGrouping.ts) — since D1 has no timezone concept,
 // the caller passes the local "start of today"/"start of yesterday"
-// boundaries as UTC ISO instants (see packages/web/src/lib/dayBoundaries.ts)
+// boundaries as UTC ISO instants (see packages/web/src/lib/feed/dayBoundaries.ts)
 // and the server buckets purely by comparing added_at against them. `total`
 // is always today+yesterday+earlier (the three buckets partition every row
 // matching the active filters, so it's never independently wrong).

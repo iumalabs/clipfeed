@@ -16,7 +16,7 @@ import type { FailureClass } from "./types.ts";
 // vocabulary substring.
 // Stable identifiers for each PERMANENT reason — the SPA maps these to
 // localized (ru/en) copy for a permanent-failed card (see
-// packages/web/src/lib/failureDisplay.ts); `reason` below stays a plain
+// packages/web/src/lib/content/failureDisplay.ts); `reason` below stays a plain
 // English string meant for logs/health-report output, never shown to a
 // user directly, so it doesn't need a ru/en pair of its own.
 export type PermanentReasonKey =

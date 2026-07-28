@@ -10,7 +10,7 @@ export function hasPendingArticles(articles: readonly Pick<ArticleListItem, "sta
   return articles.some((a) => a.status === "pending");
 }
 
-// Same fast-then-slow cadence as the old per-card poll (lib/pollSchedule.ts's
+// Same fast-then-slow cadence as the old per-card poll (lib/feed/pollSchedule.ts's
 // nextPollDelayMs), but never gives up — there is no per-poll "stuck" state
 // at the feed level (each card still derives its own "given up" display from
 // how long ITS OWN pending episode has run, see ArticleCard.tsx). The feed

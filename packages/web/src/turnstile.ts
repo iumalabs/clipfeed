@@ -1,4 +1,4 @@
-import { loadRawConfig } from "./lib/config.ts";
+import { loadRawConfig } from "./lib/api/config.ts";
 
 const SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
@@ -25,7 +25,7 @@ declare global {
 }
 
 // Reads its slice of the single shared GET /api/config fetch (see
-// lib/config.ts). A fetch failure is treated the same as "inactive" — this
+// lib/api/config.ts). A fetch failure is treated the same as "inactive" — this
 // must never block the app from working; if Turnstile is really active, the
 // server's own check on the next mutation attempt is the source of truth and
 // surfaces the error.

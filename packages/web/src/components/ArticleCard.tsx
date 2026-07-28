@@ -1,29 +1,29 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { ArticleListItem } from "@clipfeed/shared/types";
-import type { Dictionary, Lang } from "../i18n.ts";
-import { viaLabel } from "../i18n.ts";
-import { getAdminArticle, getArticle, translateArticle } from "../api.ts";
-import { selectSummaryFields } from "../lib/summaryFields.ts";
-import { formatDate, hostnameFromUrl } from "../lib/format.ts";
-import { nextPollDelayMs, type PollState } from "../lib/pollSchedule.ts";
-import { translateQueue } from "../lib/translateQueue.ts";
+import type { Dictionary, Lang } from "../i18n/i18n.ts";
+import { viaLabel } from "../i18n/i18n.ts";
+import { getAdminArticle, getArticle, translateArticle } from "../lib/api/api.ts";
+import { selectSummaryFields } from "../lib/content/summaryFields.ts";
+import { formatDate, hostnameFromUrl } from "../lib/format/format.ts";
+import { nextPollDelayMs, type PollState } from "../lib/feed/pollSchedule.ts";
+import { translateQueue } from "../lib/content/translateQueue.ts";
 import {
   hasEnglish,
   shouldForgetTranslationRequest,
   shouldRequestTranslation,
-} from "../lib/englishGate.ts";
+} from "../lib/content/englishGate.ts";
 import {
   articleErrorText,
   failClassIsPermanent,
   isDailyLimitFailure,
   isPermanentFailure,
   visitorFailureText,
-} from "../lib/failureDisplay.ts";
-import { scrollTitleIntoView } from "../lib/scroll.ts";
-import { faithfulnessCounts, visibleFaithfulnessBadgeInfo } from "../lib/faithfulness.ts";
+} from "../lib/content/failureDisplay.ts";
+import { scrollTitleIntoView } from "../lib/ui/scroll.ts";
+import { faithfulnessCounts, visibleFaithfulnessBadgeInfo } from "../lib/content/faithfulness.ts";
 import { Tooltip } from "./Tooltip.tsx";
-import { usePrefersReducedMotion, withMotionClass } from "../lib/motion.ts";
-import { pendingCardVariant } from "../lib/agentBatch.ts";
+import { usePrefersReducedMotion, withMotionClass } from "../lib/ui/motion.ts";
+import { pendingCardVariant } from "../lib/feed/agentBatch.ts";
 
 const JUST_READY_HIGHLIGHT_MS = 2000;
 

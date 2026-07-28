@@ -1,12 +1,16 @@
 import type { ArticleListItem } from "@clipfeed/shared/types";
-import type { Dictionary, Lang } from "../i18n.ts";
-import { DATE_SECTIONS, type DateSection, groupArticlesBySection } from "../lib/dateGrouping.ts";
-import { isSectionOpenTodayEmptyAware, type SectionOpenState } from "../lib/sectionState.ts";
-import { scrollElementIntoView } from "../lib/scroll.ts";
-import { computeAgentBatchIndicator, computeTodayIsEmpty } from "../lib/agentBatch.ts";
-import { isFlatSemanticView, type SearchMode } from "../lib/searchMode.ts";
-import { hasActiveFilters } from "../lib/filterState.ts";
-import { resolveSectionCount } from "../lib/sectionCount.ts";
+import type { Dictionary, Lang } from "../i18n/i18n.ts";
+import {
+  DATE_SECTIONS,
+  type DateSection,
+  groupArticlesBySection,
+} from "../lib/feed/dateGrouping.ts";
+import { isSectionOpenTodayEmptyAware, type SectionOpenState } from "../lib/feed/sectionState.ts";
+import { scrollElementIntoView } from "../lib/ui/scroll.ts";
+import { computeAgentBatchIndicator, computeTodayIsEmpty } from "../lib/feed/agentBatch.ts";
+import { isFlatSemanticView, type SearchMode } from "../lib/search/searchMode.ts";
+import { hasActiveFilters } from "../lib/feed/filterState.ts";
+import { resolveSectionCount } from "../lib/feed/sectionCount.ts";
 import { ArticleCard } from "./ArticleCard.tsx";
 import { TodayEmptyState } from "./TodayEmptyState.tsx";
 import { AgentBatchIndicator } from "./AgentBatchIndicator.tsx";
@@ -120,7 +124,7 @@ export function Feed(props: FeedProps) {
   }
 
   // Relevance beats chronology when searching by meaning — see
-  // isFlatSemanticView's doc comment in lib/searchMode.ts. Results already
+  // isFlatSemanticView's doc comment in lib/search/searchMode.ts. Results already
   // arrive ordered by score DESC from GET /api/search, so this is a straight
   // render, no re-sorting here.
   if (isFlatSemanticView(isSearching, searchMode)) {
@@ -181,7 +185,7 @@ export function Feed(props: FeedProps) {
   // articles but nothing visible YET (they render as null — see
   // ArticleCard.tsx's Part A branch) — in that case the AgentBatchIndicator
   // below takes over the "something is happening" signal instead of the
-  // countdown (see lib/agentBatch.ts's doc comment).
+  // countdown (see lib/feed/agentBatch.ts's doc comment).
   const todayIsEmpty = computeTodayIsEmpty(archivedView, isFilteredView, grouped.today);
 
   const handleReadYesterday = () => {

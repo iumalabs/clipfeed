@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import type { ArticleListItem } from "@clipfeed/shared/types";
-import type { Dictionary, Lang } from "../i18n.ts";
+import type { Dictionary, Lang } from "../i18n/i18n.ts";
 import { ArticleCard } from "./ArticleCard.tsx";
 
 export interface DeepLinkedArticleProps {
@@ -19,7 +19,7 @@ export interface DeepLinkedArticleProps {
 }
 
 // Rendered instead of the normal Feed when a Telegram drip post's deep link
-// (#article-<id>, see lib/deepLink.ts) points at an article that isn't in
+// (#article-<id>, see lib/feed/deepLink.ts) points at an article that isn't in
 // the currently loaded page(s) — fetched standalone (see App.tsx) and shown
 // as its own focused card, with a link back to the ordinary feed view
 // rather than an unbounded "keep paging until we find it" fetch loop.

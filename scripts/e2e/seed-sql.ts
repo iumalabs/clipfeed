@@ -9,7 +9,7 @@
 // e2e/fixtures/fixed-now.json), which the Playwright side also installs as
 // the browser's clock (page.clock) before navigating — so the SPA's
 // local-calendar-day section bucketing (today/yesterday/earlier, see
-// packages/web/src/lib/dateGrouping.ts) is exercised with a value both sides
+// packages/web/src/lib/feed/dateGrouping.ts) is exercised with a value both sides
 // agree on, never the real wall clock.
 //
 // Only the "pagination" fixture group actually lands in Today/Yesterday —

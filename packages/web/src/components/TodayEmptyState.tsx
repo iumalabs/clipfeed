@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
-import type { Dictionary } from "../i18n.ts";
-import { formatCountdown, nextAgentRunMs } from "../lib/agentSchedule.ts";
+import type { Dictionary } from "../i18n/i18n.ts";
+import { formatCountdown, nextAgentRunMs } from "../lib/api/agentSchedule.ts";
 
 const TICK_MS = 60_000;
 
@@ -14,7 +14,7 @@ export interface TodayEmptyStateProps {
 // see Feed.tsx — when the browser-local "today" bucket has zero articles.
 // Ticks its own countdown every minute rather than relying on a parent
 // re-render; agentHourUtc is fetched once by App.tsx (see
-// lib/agentSchedule.ts's loadAgentSchedule) and passed straight through.
+// lib/api/agentSchedule.ts's loadAgentSchedule) and passed straight through.
 export function TodayEmptyState({ dict, agentHourUtc, onReadYesterday }: TodayEmptyStateProps) {
   const [now, setNow] = useState(() => Date.now());
 

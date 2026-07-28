@@ -1,6 +1,6 @@
 // Task 50: installs a fixed browser clock BEFORE navigation, so the SPA's
 // local-calendar-day section bucketing (today/yesterday/earlier — see
-// packages/web/src/lib/dateGrouping.ts) always agrees with the timestamps
+// packages/web/src/lib/feed/dateGrouping.ts) always agrees with the timestamps
 // scripts/e2e/seed-sql.ts computed relative to this exact same instant. Never
 // the real wall clock — this is what makes the pagination flow deterministic
 // regardless of what day/time the suite actually runs.
