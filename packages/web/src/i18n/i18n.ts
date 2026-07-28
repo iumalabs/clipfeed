@@ -133,6 +133,8 @@ export interface Dictionary {
   duplicateRevealReadyToast: string;
   duplicateRevealArchivedToast: string;
   duplicateRevealFailedToast: string;
+  notFoundTitle: string;
+  notFoundHint: string;
 }
 
 const ru: Dictionary = {
@@ -268,6 +270,8 @@ const ru: Dictionary = {
   duplicateRevealReadyToast: "Эта статья уже в ленте",
   duplicateRevealArchivedToast: "Статья в архиве",
   duplicateRevealFailedToast: "Эта статья не обработалась — можно повторить",
+  notFoundTitle: "Страница не найдена",
+  notFoundHint: "Такой страницы не существует — возможно, ссылка устарела или введена с опечаткой.",
 };
 
 const en: Dictionary = {
@@ -405,6 +409,8 @@ const en: Dictionary = {
   duplicateRevealReadyToast: "Already in your feed",
   duplicateRevealArchivedToast: "This article is archived",
   duplicateRevealFailedToast: "This article failed — you can retry",
+  notFoundTitle: "Page not found",
+  notFoundHint: "This page doesn't exist — the link may be outdated or mistyped.",
 };
 
 export const dictionaries: Record<Lang, Dictionary> = { ru, en };

@@ -30,3 +30,14 @@ export function parseDeepLinkId(pathname: string, hash: string): string | null {
 export function isArticleInList(id: string, articles: readonly { id: string }[]): boolean {
   return articles.some((a) => a.id === id);
 }
+
+// The only pathnames the SPA gives any meaning to are "/" (the feed) and
+// "/a/<id>" (a deep link, see parseArticlePath above) — anything else,
+// including "/a/" with no id, is a page that doesn't exist. Hash-only
+// navigation ("#article-<id>") never changes pathname, so it's irrelevant
+// here. Checked once at mount (see App.tsx) since this SPA has no
+// client-side router to re-run it on later navigation.
+export function isUnknownPath(pathname: string): boolean {
+  if (pathname === "/" || pathname === "") return false;
+  return parseArticlePath(pathname) === null;
+}

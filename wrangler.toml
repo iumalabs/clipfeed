@@ -184,6 +184,12 @@ crons = ["0 * * * *"]
 [assets]
 directory = "./dist/web"
 binding = "ASSETS"
+# Task 60: any path the asset handler can't match to a real file (e.g. "/a/"
+# with no id, or any other unrecognized route) serves the SPA shell
+# (index.html) instead of a raw platform 404 — the SPA itself then renders
+# its own styled not-found view for a path it doesn't recognize (see
+# lib/feed/deepLink.ts's isUnknownPath and components/NotFound.tsx).
+not_found_handling = "single-page-application"
 
 [[d1_databases]]
 binding = "DB"

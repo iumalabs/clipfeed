@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import {
   isArticleInList,
+  isUnknownPath,
   parseArticleHash,
   parseArticlePath,
   parseDeepLinkId,
@@ -63,4 +64,24 @@ Deno.test("isArticleInList: true when the id is present", () => {
 Deno.test("isArticleInList: false when the id is absent, including an empty list", () => {
   assertEquals(isArticleInList("z", [{ id: "a" }, { id: "b" }]), false);
   assertEquals(isArticleInList("z", []), false);
+});
+
+// --- Task 60: distinguishing "no deep link" from "this page doesn't exist" ---
+
+Deno.test("isUnknownPath: false for the root path (the normal feed)", () => {
+  assertEquals(isUnknownPath("/"), false);
+  assertEquals(isUnknownPath(""), false);
+});
+
+Deno.test("isUnknownPath: false for a well-formed article deep link", () => {
+  assertEquals(isUnknownPath("/a/abc-123"), false);
+});
+
+Deno.test("isUnknownPath: true for /a/ with no id", () => {
+  assertEquals(isUnknownPath("/a/"), true);
+});
+
+Deno.test("isUnknownPath: true for any other unrecognized path", () => {
+  assertEquals(isUnknownPath("/apples"), true);
+  assertEquals(isUnknownPath("/api/articles"), true);
 });

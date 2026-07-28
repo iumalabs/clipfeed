@@ -50,7 +50,7 @@ import { loadRepoUrl } from "./lib/api/repoConfig.ts";
 import { loadTelegramChannelUrl } from "./lib/api/telegramConfig.ts";
 import { classifyApiError, localizedErrorMessage } from "./lib/api/errorMessages.ts";
 import { mergeRefreshedArticles, pickFailedIds } from "./lib/feed/failedRefresh.ts";
-import { isArticleInList, parseDeepLinkId } from "./lib/feed/deepLink.ts";
+import { isArticleInList, isUnknownPath, parseDeepLinkId } from "./lib/feed/deepLink.ts";
 import {
   classifyDuplicateState,
   duplicateRevealMessage,
@@ -67,6 +67,7 @@ import { Toast } from "./components/Toast.tsx";
 import { Footer } from "./components/Footer.tsx";
 import { ScrollToTopButton } from "./components/ScrollToTopButton.tsx";
 import { DeepLinkedArticle } from "./components/DeepLinkedArticle.tsx";
+import { NotFound } from "./components/NotFound.tsx";
 
 const SEARCH_DEBOUNCE_MS = 300;
 const PAGE_LIMIT = 20;
@@ -261,6 +262,15 @@ export function App() {
   const [deepLinkedArticle, setDeepLinkedArticle] = useState<ArticleListItem | null>(null);
   const [forceOpenSection, setForceOpenSection] = useState<DateSection | null>(null);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // Task 60: a pathname the SPA gives no meaning to at all (e.g. "/a/" with
+  // no id) — wrangler.toml's [assets] not_found_handling still serves this
+  // same SPA shell for it, so without this the app silently fell back to
+  // rendering the ordinary feed with no indication the URL itself was wrong.
+  // Checked once at mount, same spirit as deepLinkPending above.
+  const [pathNotFound, setPathNotFound] = useState(() =>
+    isUnknownPath(globalThis.location?.pathname ?? "/")
+  );
 
   const setLang = (next: Lang) => {
     setLangState(next);
@@ -646,6 +656,19 @@ export function App() {
     }
   };
 
+  // The single place that fully exits a deep-linked article view (or an
+  // unknown-path 404 view): clears the URL and every piece of that state, so
+  // no earlier caller can leave one piece behind (that gap is what let
+  // clicking the logo from "/a/<id>" reset filters but leave
+  // deepLinkedArticle mounted and the URL unchanged).
+  const resetDeepLink = () => {
+    clearDeepLinkUrl();
+    setDeepLinkPending(null);
+    setDeepLinkedArticle(null);
+    setForceOpenSection(null);
+    setPathNotFound(false);
+  };
+
   // Any explicit filter/search interaction drops deep-link state — a user
   // who starts filtering clearly isn't interested in the linked article
   // anymore, and leaving the URL as-is would otherwise re-resolve it (or
@@ -658,15 +681,11 @@ export function App() {
       skipFirstDeepLinkClear.current = false;
       return;
     }
-    clearDeepLinkUrl();
-    setDeepLinkPending(null);
-    setDeepLinkedArticle(null);
-    setForceOpenSection(null);
+    resetDeepLink();
   }, [activeTag, activeSource, query, archivedView]);
 
   const handleBackToFeed = () => {
-    setDeepLinkedArticle(null);
-    clearDeepLinkUrl();
+    resetDeepLink();
   };
 
   // Task 55: reveals an existing article by re-entering the exact same
@@ -928,13 +947,16 @@ export function App() {
   // handleClearAll but also covering the two pieces of state that pill
   // doesn't touch (searchMode, archivedView). Section open/closed state is
   // deliberately left alone — it's the user's persisted preference, not
-  // part of "back to default".
+  // part of "back to default". Also exits a deep-linked article view
+  // (resetDeepLink) — otherwise clicking the logo from "/a/<id>" cleared
+  // filters but left the single-article view mounted and the URL unchanged.
   const handleLogoClick = () => {
     dispatchFilter({ type: "clear-all" });
     setSearchInput("");
     const reset = computeLogoResetState();
     setSearchMode(reset.searchMode);
     setArchivedView(reset.archivedView);
+    resetDeepLink();
     globalThis.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -979,7 +1001,9 @@ export function App() {
             clearSourceAria={dict.clearSourceFilterAria}
           />
 
-          {deepLinkedArticle
+          {pathNotFound
+            ? <NotFound dict={dict} onBackToFeed={handleBackToFeed} />
+            : deepLinkedArticle
             ? (
               <DeepLinkedArticle
                 dict={dict}
