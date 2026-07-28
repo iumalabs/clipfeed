@@ -38,3 +38,11 @@ export function filterReducer(state: FilterState, action: FilterAction): FilterS
 export function hasActiveFilters(state: Pick<FilterState, "tag" | "source">): boolean {
   return state.tag !== null || state.source !== null;
 }
+
+// Feeds the mobile filters button's badge (Task 54) — 0, 1, or 2 depending
+// on how many of tag/source are active. Deliberately excludes the search
+// query: the search box is always visible in the header itself, so it
+// doesn't need a second "something is filtered" indicator.
+export function countActiveFilters(state: Pick<FilterState, "tag" | "source">): number {
+  return (state.tag !== null ? 1 : 0) + (state.source !== null ? 1 : 0);
+}
