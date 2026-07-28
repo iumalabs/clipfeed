@@ -1,5 +1,6 @@
 import { assertEquals } from "@std/assert";
 import {
+  countActiveFilters,
   EMPTY_FILTER_STATE,
   filterReducer,
   type FilterState,
@@ -64,6 +65,22 @@ Deno.test("hasActiveFilters: true when only a tag is active", () => {
 
 Deno.test("hasActiveFilters: true when only a source is active", () => {
   assertEquals(hasActiveFilters({ tag: null, source: "example.com" }), true);
+});
+
+Deno.test("countActiveFilters: 0 when both tag and source are null", () => {
+  assertEquals(countActiveFilters({ tag: null, source: null }), 0);
+});
+
+Deno.test("countActiveFilters: 1 when only a tag is active", () => {
+  assertEquals(countActiveFilters({ tag: "ai", source: null }), 1);
+});
+
+Deno.test("countActiveFilters: 1 when only a source is active", () => {
+  assertEquals(countActiveFilters({ tag: null, source: "example.com" }), 1);
+});
+
+Deno.test("countActiveFilters: 2 when both tag and source are active", () => {
+  assertEquals(countActiveFilters({ tag: "ai", source: "example.com" }), 2);
 });
 
 // --- reducer + URL-builder combinations (the actual fetch query the SPA sends) ---

@@ -339,6 +339,44 @@ ul {
   color: var(--acc);
 }
 
+/* --- Task 54: mobile filters button (opens the FilterSheet bottom sheet) ---
+   Always rendered (same pattern the old .filter-row-mobile/.sidebar pair
+   used) — hidden here by default, shown only past the .layout/.sidebar
+   breakpoint below, so desktop is untouched. */
+
+.filters-button {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--txt);
+  border-radius: 8px;
+  padding: 0 12px;
+  height: 34px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.filters-button:hover {
+  border-color: var(--acc);
+}
+
+.filters-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--grad-action);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
 @media (max-width: 640px) {
   .search-field {
     order: 3;
@@ -385,10 +423,6 @@ ul {
   gap: 24px;
 }
 
-.filter-row-mobile {
-  display: none;
-}
-
 .app-footer {
   max-width: 1200px;
   margin: 0 auto;
@@ -424,22 +458,8 @@ ul {
     display: none;
   }
 
-  .filter-row-mobile {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 8px;
-    margin-bottom: 16px;
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-
-  .filter-row-mobile::-webkit-scrollbar {
-    display: none;
-  }
-
-  .filter-row-mobile .pill {
-    flex-shrink: 0;
+  .filters-button {
+    display: inline-flex;
   }
 }
 
@@ -1523,6 +1543,88 @@ ul {
   border-radius: 999px;
   padding: 9px 20px;
   font-size: 0.875rem;
+}
+
+/* --- Task 54: mobile filters bottom sheet --- */
+
+.filter-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+}
+
+.filter-sheet {
+  background: var(--card);
+  border-radius: 16px 16px 0 0;
+  padding: 8px 20px 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.3);
+  transform: translateY(0);
+  transition: transform 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-sheet {
+    transition: none;
+  }
+}
+
+.filter-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  margin: 4px auto 12px;
+}
+
+.filter-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.filter-sheet-title {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.filter-sheet-search {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--txt);
+  font-size: 0.875rem;
+  margin-bottom: 16px;
+}
+
+.filter-sheet-section {
+  margin-bottom: 16px;
+}
+
+.filter-sheet-showall {
+  display: block;
+  margin-top: 8px;
+  border: none;
+  background: transparent;
+  color: var(--acc);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0;
+}
+
+.filter-sheet-showall:hover {
+  text-decoration: underline;
 }
 
 /* --- Toast --- */

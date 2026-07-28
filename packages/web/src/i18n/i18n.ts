@@ -118,6 +118,12 @@ export interface Dictionary {
   preparingEnglishLabel: string;
   imageSourcePrefix: string;
   imageAlt: string;
+  filtersButtonLabel: string;
+  filtersSheetTitle: string;
+  filtersSheetCloseAria: string;
+  filtersSearchPlaceholder: string;
+  filtersTagsHeading: string;
+  filtersShowAllLabel: string;
 }
 
 const ru: Dictionary = {
@@ -238,6 +244,12 @@ const ru: Dictionary = {
   preparingEnglishLabel: "Готовим английскую версию…",
   imageSourcePrefix: "Изображение",
   imageAlt: "Изображение к статье",
+  filtersButtonLabel: "Фильтры",
+  filtersSheetTitle: "Фильтры",
+  filtersSheetCloseAria: "Закрыть фильтры",
+  filtersSearchPlaceholder: "Найти тег или источник",
+  filtersTagsHeading: "Теги",
+  filtersShowAllLabel: "показать все",
 };
 
 const en: Dictionary = {
@@ -360,6 +372,12 @@ const en: Dictionary = {
   preparingEnglishLabel: "Preparing English version…",
   imageSourcePrefix: "Image",
   imageAlt: "Article image",
+  filtersButtonLabel: "Filters",
+  filtersSheetTitle: "Filters",
+  filtersSheetCloseAria: "Close filters",
+  filtersSearchPlaceholder: "Find a tag or source",
+  filtersTagsHeading: "Tags",
+  filtersShowAllLabel: "show all",
 };
 
 export const dictionaries: Record<Lang, Dictionary> = { ru, en };

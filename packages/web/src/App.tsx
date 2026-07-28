@@ -33,7 +33,7 @@ import {
 import { computeLogoResetState } from "./lib/feed/feedReset.ts";
 import { canMutate, classifyMeOutcome, resolveEffectiveLang } from "./lib/api/ownerMode.ts";
 import { isPickOfTheDay } from "./lib/feed/pickOfTheDay.ts";
-import { EMPTY_FILTER_STATE, filterReducer } from "./lib/feed/filterState.ts";
+import { countActiveFilters, EMPTY_FILTER_STATE, filterReducer } from "./lib/feed/filterState.ts";
 import {
   bucketSection,
   type DateSection,
@@ -54,7 +54,8 @@ import { applyFeedPollSnapshot, feedPollDelayMs, hasPendingArticles } from "./li
 import { translateQueue } from "./lib/content/translateQueue.ts";
 import { Header } from "./components/Header.tsx";
 import { AddModal } from "./components/AddModal.tsx";
-import { ActiveFilterChips, Sidebar, SourcePills, TopicPills } from "./components/Sidebar.tsx";
+import { ActiveFilterChips, Sidebar } from "./components/Sidebar.tsx";
+import { FilterSheet } from "./components/FilterSheet.tsx";
 import { Feed } from "./components/Feed.tsx";
 import { Toast } from "./components/Toast.tsx";
 import { Footer } from "./components/Footer.tsx";
@@ -205,6 +206,10 @@ export function App() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  // Task 54: mobile-only bottom sheet replacing the stacked sidebar; the
+  // sheet reuses the same filter state/reducer as desktop's Sidebar — only
+  // the presentation differs by breakpoint (see FilterSheet.tsx).
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [ownerModeState, setOwnerModeState] = useState<"loading" | "owner" | "visitor">(
     "loading",
@@ -919,25 +924,12 @@ export function App() {
         onAddClick={() => setModalOpen(true)}
         isOwner={isOwner}
         repoUrl={repoUrl}
+        onFiltersClick={() => setFilterSheetOpen(true)}
+        activeFilterCount={countActiveFilters(filters)}
       />
 
       <div class="layout">
         <main class="main-column">
-          <div class="filter-row-mobile">
-            <TopicPills
-              dict={dict}
-              tags={tagFacets}
-              activeTag={activeTag}
-              onTagClick={handleTagClick}
-              onClearAll={handleClearAll}
-            />
-            <SourcePills
-              sources={sourceFacets}
-              activeSource={activeSource}
-              onSourceClick={handleSourceClick}
-            />
-          </div>
-
           <ActiveFilterChips
             activeTag={activeTag}
             activeSource={activeSource}
@@ -1016,6 +1008,25 @@ export function App() {
           isOwner={isOwner}
         />
       </div>
+
+      <FilterSheet
+        dict={dict}
+        open={filterSheetOpen}
+        onClose={() => setFilterSheetOpen(false)}
+        tags={tagFacets}
+        activeTag={activeTag}
+        onTagClick={handleTagClick}
+        onClearAll={handleClearAll}
+        sources={sourceFacets}
+        activeSource={activeSource}
+        onSourceClick={handleSourceClick}
+        totalCount={articleCounts?.total ?? articles.length}
+        archivedView={archivedView}
+        onArchiveToggle={() => {
+          setArchivedView((current) => !current);
+        }}
+        isOwner={isOwner}
+      />
 
       <Footer dict={dict} repoUrl={repoUrl} />
 

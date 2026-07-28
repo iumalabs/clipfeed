@@ -20,6 +20,11 @@ export interface HeaderProps {
   // lib/repoConfig.ts's isValidRepoUrl) hides the icon entirely rather than
   // rendering a broken/placeholder link.
   repoUrl: string | null;
+  // Task 54: always rendered (mirrors the existing filter-row-mobile/sidebar
+  // pattern) — hidden on desktop purely via the .filters-button CSS
+  // breakpoint, so desktop markup/behavior stays byte-for-byte unchanged.
+  onFiltersClick: () => void;
+  activeFilterCount: number;
 }
 
 export function Header(
@@ -38,6 +43,8 @@ export function Header(
     onAddClick,
     isOwner,
     repoUrl,
+    onFiltersClick,
+    activeFilterCount,
   }: HeaderProps,
 ) {
   return (
@@ -94,6 +101,15 @@ export function Header(
             </button>
           )}
         </div>
+
+        <button
+          type="button"
+          class="filters-button"
+          onClick={onFiltersClick}
+        >
+          {dict.filtersButtonLabel}
+          {activeFilterCount > 0 && <span class="filters-badge">{activeFilterCount}</span>}
+        </button>
 
         {
           /* Only shown once a search is actually active — an idle search box
