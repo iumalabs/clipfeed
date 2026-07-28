@@ -10,6 +10,7 @@ export interface RawConfig {
   agent_hour_utc?: number | null;
   agent_daily_picks?: number;
   repo_url?: string;
+  telegram_channel_url?: string;
   turnstile_site_key?: string | null;
 }
 

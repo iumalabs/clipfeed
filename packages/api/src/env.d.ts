@@ -242,6 +242,14 @@ declare global {
     // are actually sent per UTC day, as a flood guard against the scraping
     // agent producing more than one batch in a day (see Task 36).
     TELEGRAM_CHANNEL_ID?: string;
+    // Task 56: the public https://t.me/<name> link for humans to subscribe
+    // — distinct from TELEGRAM_CHANNEL_ID above (the internal id the
+    // publisher posts to, never itself a clickable URL). [vars], default ""
+    // — exposed via GET /api/config as telegram_channel_url; the SPA's
+    // "Subscribe on Telegram" banner (Sidebar.tsx/FilterSheet.tsx) only
+    // renders for a well-formed https://t.me/ URL, so it's simply absent
+    // everywhere until a fork sets this.
+    TELEGRAM_CHANNEL_URL?: string;
     PUBLISH_START_HOUR_UTC?: string;
     PUBLISH_END_HOUR_UTC?: string;
     PUBLISH_ENABLED?: string;

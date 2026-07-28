@@ -52,6 +52,14 @@ AUTOBLOCK_TTL_DAYS = "60"
 # caps how many of those are actually sent per UTC day, as a flood guard
 # against the scraping agent producing more than one batch in a day.
 TELEGRAM_CHANNEL_ID = "@clipfeedchannel"
+# Task 56: the public https://t.me/<name> link for HUMANS to subscribe —
+# distinct from TELEGRAM_CHANNEL_ID above, which is the internal id the
+# publisher POSTs to and is never itself a clickable/shareable URL. Powers
+# the "Subscribe on Telegram" banner (GET /api/config, Sidebar.tsx,
+# FilterSheet.tsx) — [vars] default "" (per the forkability policy), and
+# only a well-formed https://t.me/ URL renders the banner at all, so an
+# unset or malformed value just hides it everywhere.
+TELEGRAM_CHANNEL_URL = "https://t.me/clipfeedchannel"
 PUBLISH_START_HOUR_UTC = "4"
 PUBLISH_END_HOUR_UTC = "18"
 PUBLISH_ENABLED = "true"

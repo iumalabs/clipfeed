@@ -854,6 +854,13 @@ Plus `[vars]`, all optional:
   blank.
 - `TELEGRAM_CHANNEL_ID` (default `""`) — when set, drip posts go to this channel instead of your own
   DM. See "Publishing to a channel" below.
+- `TELEGRAM_CHANNEL_URL` (default `""`) — the public `https://t.me/<name>` link shown to visitors as
+  a "Subscribe on Telegram" banner (sidebar on desktop, bottom of the filter sheet on mobile),
+  exposed via `GET /api/config` as `telegram_channel_url`. This is distinct from
+  `TELEGRAM_CHANNEL_ID` above: the id is what the bot POSTs to internally and is never itself a
+  clickable link (it may be a numeric `-100...` id for private channels), while this is the
+  human-facing join link for a public channel. Only a well-formed `https://t.me/<name>` URL renders
+  the banner — leave it unset to omit the banner entirely.
 - `PUBLISH_START_HOUR_UTC` / `PUBLISH_END_HOUR_UTC` (defaults `4` / `18`), `PUBLISH_ENABLED`
   (default `true`), and `PUBLISH_MAX_PER_DAY` (default `10`) — see "Drip publishing (cron)" below.
 

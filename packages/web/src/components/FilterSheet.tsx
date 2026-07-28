@@ -8,6 +8,7 @@ import {
   type TagFacet,
   TopicPills,
 } from "./Sidebar.tsx";
+import { TelegramBanner } from "./TelegramBanner.tsx";
 
 // Task 54: caps how many tag/source pills show before the sheet needs its
 // own "show all" — see facetDisclosure.ts's doc comment for why this exists
@@ -34,6 +35,7 @@ export interface FilterSheetProps {
   archivedView: boolean;
   onArchiveToggle: () => void;
   isOwner: boolean;
+  telegramChannelUrl: string | null;
 }
 
 function focusableElements(container: HTMLElement): HTMLElement[] {
@@ -60,6 +62,7 @@ export function FilterSheet(
     archivedView,
     onArchiveToggle,
     isOwner,
+    telegramChannelUrl,
   }: FilterSheetProps,
 ) {
   const [searchValue, setSearchValue] = useState("");
@@ -269,6 +272,8 @@ export function FilterSheet(
             {archivedView ? dict.sidebarBackToFeed : dict.sidebarArchiveLink}
           </button>
         )}
+
+        <TelegramBanner dict={dict} telegramChannelUrl={telegramChannelUrl} />
       </div>
     </div>
   );
