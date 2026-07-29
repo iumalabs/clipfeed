@@ -27,8 +27,17 @@ const JSON_LD_TYPE_PATTERN = /type\s*=\s*["']application\/ld\+json["']/i;
 const OTHER_NOISE_TAG_PATTERN = /<(style|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi;
 const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/g;
 
+function stripHtmlCommentsCompletely(input: string): string {
+  let current = input;
+  while (true) {
+    const next = current.replace(HTML_COMMENT_PATTERN, "");
+    if (next === current) return next;
+    current = next;
+  }
+}
+
 function stripNoise(html: string): string {
-  const withoutComments = html.replace(HTML_COMMENT_PATTERN, "");
+  const withoutComments = stripHtmlCommentsCompletely(html);
   const withoutNoiseScripts = withoutComments.replace(
     SCRIPT_TAG_PATTERN,
     (match, attrs) => JSON_LD_TYPE_PATTERN.test(attrs) ? match : "",
