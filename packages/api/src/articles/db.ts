@@ -93,15 +93,14 @@ function rowToArticle(row: ArticleRow): Article {
 // Projects a full (owner-only) Article down to the shape GET
 // /api/articles/:id (public) actually returns — see PublicArticle's doc
 // comment in @clipfeed/shared/types for why full_text/error/
-// faithfulness_json are dropped (faithfulness_verdict is NOT dropped — the
-// caution badge is meant to be visible to every reader, not just the
-// owner).
+// faithfulness_json/faithfulness_verdict are dropped.
 export function toPublicArticle(article: Article): PublicArticle {
   const {
     full_text: _fullText,
     error,
     faithfulness_json: _faithfulnessJson,
     faithfulness_enforced_at: _faithfulnessEnforcedAt,
+    faithfulness_verdict: _faithfulnessVerdict,
     ...rest
   } = article;
   return { ...rest, has_error: error !== null };
@@ -117,6 +116,7 @@ export function toPublicListItem(item: ArticleListItem): PublicArticle {
     error,
     faithfulness_json: _faithfulnessJson,
     faithfulness_enforced_at: _faithfulnessEnforcedAt,
+    faithfulness_verdict: _faithfulnessVerdict,
     ...rest
   } = item;
   return { ...rest, has_error: error !== null };

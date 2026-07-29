@@ -64,9 +64,9 @@ export const ARTICLE_LIST_ITEM_KEYS = keysOf<ArticleListItem>()(
 );
 
 // GET /api/articles / /api/articles/:id / /api/search (public) — the
-// redacted shape: full_text/error/faithfulness_json/faithfulness_enforced_at
-// dropped, has_error added (see toPublicListItem/toPublicArticle in
-// packages/api/src/articles/db.ts).
+// redacted shape: full_text/error/faithfulness_json/faithfulness_verdict/
+// faithfulness_enforced_at dropped, has_error added (see
+// toPublicListItem/toPublicArticle in packages/api/src/articles/db.ts).
 export const PUBLIC_ARTICLE_KEYS = keysOf<PublicArticle>()(
   [
     "id",
@@ -87,7 +87,6 @@ export const PUBLIC_ARTICLE_KEYS = keysOf<PublicArticle>()(
     "archived",
     "fail_class",
     "heal_attempts",
-    "faithfulness_verdict",
     "faithfulness_checked_at",
     "embedded_at",
     "telegram_published_at",

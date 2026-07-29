@@ -87,7 +87,6 @@ const samplePublicArticle: PublicArticle = {
   archived: false,
   fail_class: null,
   heal_attempts: 0,
-  faithfulness_verdict: null,
   faithfulness_checked_at: null,
   embedded_at: null,
   telegram_published_at: null,
@@ -107,12 +106,14 @@ Deno.test("openapi drift: PublicArticle required fields match the real shared ty
 const sampleArticleListItem: ArticleListItem = {
   ...samplePublicArticle,
   error: null,
+  faithfulness_verdict: null,
   faithfulness_json: null,
   faithfulness_enforced_at: null,
 };
-// PublicArticle's owner-only counterpart drops has_error and adds error/faithfulness_json —
-// strip has_error explicitly so the ArticleListItem sample doesn't carry a field that isn't
-// actually part of that type (TypeScript wouldn't catch the extra key via object spread here).
+// PublicArticle's owner-only counterpart drops has_error and adds error/
+// faithfulness_json/faithfulness_verdict — strip has_error explicitly so the
+// ArticleListItem sample doesn't carry a field that isn't actually part of
+// that type (TypeScript wouldn't catch the extra key via object spread here).
 delete (sampleArticleListItem as { has_error?: boolean }).has_error;
 
 Deno.test("openapi drift: ArticleListItem required fields match the real shared type", () => {

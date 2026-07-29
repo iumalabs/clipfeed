@@ -241,7 +241,7 @@
       },
       "PublicArticle": {
         "type": "object",
-        "description": "The public-safe article shape: Article minus full_text, error, and faithfulness_json, plus has_error. faithfulness_verdict IS still public — the caution badge is meant to be visible to every reader, not just the owner.",
+        "description": "The public-safe article shape: Article minus full_text, error, faithfulness_json, and faithfulness_verdict, plus has_error. faithfulness_verdict is owner-only — the caution badge is an internal quality signal, not a reader-facing disclaimer (see ArticleCard.tsx's isOwner gate).",
         "required": [
           "id",
           "url",
@@ -261,7 +261,6 @@
           "archived",
           "fail_class",
           "heal_attempts",
-          "faithfulness_verdict",
           "faithfulness_checked_at",
           "embedded_at",
           "telegram_published_at",
@@ -293,7 +292,6 @@
           "archived": { "type": "boolean" },
           "fail_class": { "$ref": "#/components/schemas/FailureClass" },
           "heal_attempts": { "type": "integer" },
-          "faithfulness_verdict": { "$ref": "#/components/schemas/FaithfulnessVerdict" },
           "faithfulness_checked_at": { "type": ["string", "null"], "format": "date-time" },
           "embedded_at": { "type": ["string", "null"], "format": "date-time" },
           "telegram_published_at": { "type": ["string", "null"] },
