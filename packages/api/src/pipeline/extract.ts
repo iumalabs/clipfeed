@@ -44,8 +44,69 @@ function stripHtmlCommentsCompletely(input: string): string {
   }
 }
 
+// Bounds the string handed to capBytes/parseHTML so a large non-content
+// <script> blob (analytics bundles, inline JSON blobs, etc.) can't crowd real
+// article content out past HTML_PARSE_CAP below. This is a size-bound
+// optimization only, not a security filter — extractArticle's DOM-based
+// removal (after parseHTML, see below) is the authoritative step, and nothing
+// here is ever returned as HTML to a client (see CLAUDE.md). Deliberately a
+// manual scan for the literal `</script` sequence rather than a single regex
+// spanning open-to-close tags: CodeQL's js/bad-tag-filter flags exactly that
+// pattern as unreliable, since a lazy/greedy match across an entire document
+// can't reliably tell where a script block really ends. Walking the string by
+// hand and searching for the literal close tag mirrors how real HTML parsers
+// treat <script> as a raw-text element (content inside can't prematurely
+// close it), without the backtracking-prone regex.
+function stripLargeScriptContentForSizeBound(html: string): string {
+  const lower = html.toLowerCase();
+  const parts: string[] = [];
+  let i = 0;
+
+  while (i < html.length) {
+    const openIdx = lower.indexOf("<script", i);
+    if (openIdx === -1) {
+      parts.push(html.slice(i));
+      break;
+    }
+
+    const boundaryChar = html[openIdx + 7];
+    const isRealTag = boundaryChar === undefined || /[\s>/]/.test(boundaryChar);
+    if (!isRealTag) {
+      // e.g. "<scripter" — not actually a <script> tag; keep scanning.
+      parts.push(html.slice(i, openIdx + 7));
+      i = openIdx + 7;
+      continue;
+    }
+
+    const tagCloseIdx = html.indexOf(">", openIdx);
+    if (tagCloseIdx === -1) {
+      // Unterminated opening tag — nothing meaningful follows.
+      parts.push(html.slice(i));
+      break;
+    }
+    parts.push(html.slice(i, openIdx));
+    const openTag = html.slice(openIdx, tagCloseIdx + 1);
+    const keepJsonLd = openTag.toLowerCase().includes("application/ld+json");
+
+    const closeIdx = lower.indexOf("</script", tagCloseIdx + 1);
+    if (closeIdx === -1) {
+      // Unterminated script — the rest of the document is its raw-text
+      // content, same as a real parser would treat it.
+      if (keepJsonLd) parts.push(html.slice(openIdx));
+      break;
+    }
+    const closeTagEndIdx = html.indexOf(">", closeIdx);
+    const end = closeTagEndIdx === -1 ? html.length : closeTagEndIdx + 1;
+
+    if (keepJsonLd) parts.push(html.slice(openIdx, end));
+    i = end;
+  }
+
+  return parts.join("");
+}
+
 function stripNoise(html: string): string {
-  return stripHtmlCommentsCompletely(html);
+  return stripHtmlCommentsCompletely(stripLargeScriptContentForSizeBound(html));
 }
 
 // 1.5 MB — applied AFTER noise-stripping, so a legitimately large article

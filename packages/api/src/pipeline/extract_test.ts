@@ -75,3 +75,39 @@ Deno.test("extractArticle: publishedAt is null when no date metadata is present"
 
   assertEquals(result.publishedAt, null);
 });
+
+// --- Security-fix follow-up: the hand-rolled pre-cap <script> scanner ---
+
+Deno.test("extractArticle: a huge non-JSON-LD script alongside a JSON-LD block still yields both the date and the content", () => {
+  const junkScript = `<script>${"x".repeat(3_000_000)}</script>`;
+  const jsonLd =
+    `<script type="application/ld+json">{"@type":"Article","datePublished":"2026-07-10T08:00:00.000Z"}</script>`;
+  const html = `<html><head>${jsonLd}</head><body>${junkScript}<article><p>${
+    "Real article content. ".repeat(50)
+  }</p></article></body></html>`;
+
+  const result = extractArticle(html);
+
+  assertEquals(result.publishedAt, "2026-07-10T08:00:00.000Z");
+  assert(result.textContent.includes("Real article content"));
+});
+
+Deno.test("extractArticle: a tag whose name merely starts with 'script' is not treated as a <script>", () => {
+  const html = `<html><body><scripter>not a script tag, should survive</scripter><article><p>${
+    "Real article content. ".repeat(20)
+  }</p></article></body></html>`;
+
+  const result = extractArticle(html);
+
+  assert(result.textContent.includes("Real article content"));
+});
+
+Deno.test("extractArticle: an unterminated <script> tag does not crash extraction", () => {
+  const html = `<html><body><article><p>${
+    "Real article content. ".repeat(20)
+  }</p></article><script>var neverClosed = 1;`;
+
+  const result = extractArticle(html);
+
+  assert(result.textContent.includes("Real article content"));
+});
