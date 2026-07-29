@@ -26,6 +26,10 @@ function isoMinutesAgo(mins: number): string {
   return new Date(NOW.getTime() - mins * 60_000).toISOString();
 }
 
+function isoDaysAgo(days: number): string {
+  return new Date(NOW.getTime() - days * 24 * 60 * 60_000).toISOString();
+}
+
 function sqlString(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
@@ -49,6 +53,7 @@ interface ArticleRow {
   fail_class?: string | null;
   en_generated_at?: string | null;
   archived?: boolean;
+  published_at?: string | null;
 }
 
 function summaryFor(title: string, tldr: string): Record<string, unknown> {
@@ -79,6 +84,7 @@ function insertStatement(row: ArticleRow): string {
     "error",
     "fail_class",
     "en_generated_at",
+    "published_at",
   ];
   const values = [
     sqlString(row.id),
@@ -95,6 +101,7 @@ function insertStatement(row: ArticleRow): string {
     row.error !== undefined && row.error !== null ? sqlString(row.error) : "NULL",
     row.fail_class ? sqlString(row.fail_class) : "NULL",
     row.en_generated_at ? sqlString(row.en_generated_at) : "NULL",
+    row.published_at ? sqlString(row.published_at) : "NULL",
   ];
   return `INSERT INTO articles (${columns.join(", ")}) VALUES (${values.join(", ")});`;
 }
@@ -386,6 +393,41 @@ function duplicateAddRows(): ArticleRow[] {
   ];
 }
 
+// --- Group 7: section grouping vs. card date (Task 61) ---
+// The owner's exact bug report: an article added TODAY but published
+// several days ago must render under "Today" (sections bucket by
+// added_at), while its card still shows the OLD published date (the
+// card label reads published_at, falling back to added_at only when
+// published_at is missing/unparseable — see lib/format/format.ts's
+// resolveCardDateIso).
+const SECTION_GROUPING_SOURCE = "e2e-sectiongrouping.example.com";
+const SECTION_GROUPING_TAG = "e2e-sectiongrouping";
+export const SECTION_GROUPING_ARTICLE_ID = "e2e-sectiongrouping-old-published";
+export const SECTION_GROUPING_PUBLISHED_AT = isoDaysAgo(4);
+
+function sectionGroupingRows(): ArticleRow[] {
+  return [
+    {
+      id: SECTION_GROUPING_ARTICLE_ID,
+      url: `https://${SECTION_GROUPING_SOURCE}/old-published`,
+      title: "Old article added today",
+      source: SECTION_GROUPING_SOURCE,
+      // 2 min ago — deliberately not a multiple of 5 so it never ties with
+      // any pagination-group row (those sit at 5, 10, 15, ... min ago).
+      added_at: isoMinutesAgo(2),
+      published_at: SECTION_GROUPING_PUBLISHED_AT,
+      added_via: "manual",
+      status: "ready",
+      tags: [SECTION_GROUPING_TAG],
+      summary_json: summaryFor(
+        "Old article added today",
+        "Старая статья, добавленная сегодня.",
+      ),
+      summary_ru: "Старая статья, добавленная сегодня.",
+    },
+  ];
+}
+
 export function buildSeedSql(): string {
   const rows = [
     ...paginationRows(),
@@ -394,6 +436,7 @@ export function buildSeedSql(): string {
     ...searchRows(),
     ...deepLinkRows(),
     ...duplicateAddRows(),
+    ...sectionGroupingRows(),
   ];
   return [
     "DELETE FROM articles;",
