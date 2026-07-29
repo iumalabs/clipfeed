@@ -15,6 +15,7 @@ import { loadBlocklistConfig } from "./curation.ts";
 import { listAutoBlocks } from "./autoblock.ts";
 import { type AgentRunTrigger, recordAgentRun } from "./agent-run-tracker.ts";
 import { isRobotsRespectEnabled } from "../pipeline/robots.ts";
+import { normalizePublishedAt } from "../pipeline/publishedDate.ts";
 
 // Structured, category-level stage log for the agent job — counts and ids
 // only, never candidate titles/snippets or credentials.
@@ -126,6 +127,13 @@ export async function runAgentJob(
     if (existingId) continue;
 
     const id = crypto.randomUUID();
+    // Task 62: an RSS candidate's own publishedAt — for Hacker News
+    // specifically this is when the story was POSTED TO HN, not when the
+    // linked article itself was published, so it's a fallback baseline
+    // only. The pipeline's own extraction stage (extract.ts) gets a second,
+    // more authoritative look at the actual page's metadata once this
+    // article is processed, and overwrites this value when it finds one
+    // (see PipelineSuccessUpdate.publishedAt / markArticleReady).
     await insertPendingArticle(env.DB, {
       id,
       url: pick.url,
@@ -134,6 +142,7 @@ export async function runAgentJob(
       tags: [pick.sourceId],
       added_via: "agent",
       added_at: new Date().toISOString(),
+      published_at: normalizePublishedAt(pick.publishedAt) ?? undefined,
     });
 
     // Sequential, not parallel — stays well inside CPU limits. The

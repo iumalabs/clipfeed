@@ -5,6 +5,7 @@ import type {
   ArticleCounts,
   DuplicateArticleResponse,
   EmbeddingsBackfillResponse,
+  PublishedAtBackfillResponse,
   QueueMessage,
   RobotsBlockedResponse,
 } from "@clipfeed/shared/types";
@@ -14,6 +15,7 @@ import type { ListArticlesParams } from "./articles/db.ts";
 import {
   backfillNormalizedTags,
   clearArticleImage,
+  countArticlesForPublishedAtBackfill,
   countUnembeddedArticles,
   deleteArticle,
   findArticleIdByUrl,
@@ -26,10 +28,12 @@ import {
   getSourceStats,
   insertPendingArticle,
   listArticles,
+  listArticlesForPublishedAtBackfill,
   listSummaryValidationFailures,
   listUnembeddedArticles,
   markArticlePending,
   markEmbedded,
+  markPublishedAtBackfillChecked,
   patchArticle,
   RECENT_TITLES_DEDUP_WINDOW_MS,
   resetHealAttempts,
@@ -85,7 +89,9 @@ import { loadBlocklistConfig, loadCurationConfig } from "./agent/curation.ts";
 import { normalizeDomainInput, resolveDomainPrecedence } from "./agent/domain-block.ts";
 import { hostname } from "./lib/url-host.ts";
 import { clearAutoBlock, isAutoBlocked, listAutoBlocks } from "./agent/autoblock.ts";
-import { isRobotsRespectEnabled, robotsAllowsUrl } from "./pipeline/robots.ts";
+import { honorCrawlDelay, isRobotsRespectEnabled, robotsAllowsUrl } from "./pipeline/robots.ts";
+import { safeFetchText } from "./pipeline/ssrf.ts";
+import { extractArticle } from "./pipeline/extract.ts";
 import { buildBotPageHtml } from "./bot-page.ts";
 import openApiSpec from "../openapi.json" with { type: "json" };
 
@@ -1039,6 +1045,72 @@ app.post("/api/admin/embeddings/backfill", async (c) => {
 
   const remaining = await countUnembeddedArticles(c.env.DB);
   return c.json({ processed, remaining } satisfies EmbeddingsBackfillResponse);
+});
+
+// Same batch size as embeddings backfill's own — see that endpoint's doc
+// comment for why (one Workers CPU-time budget, comfortably, even with a
+// network round-trip per row here instead of an AI call).
+const PUBLISHED_AT_BACKFILL_BATCH_SIZE = 20;
+
+// Task 62: idempotent, synchronous-paginated backfill for pre-existing
+// articles saved before this feature existed (published_at is populated
+// going forward by the normal pipeline — see extract.ts, pipeline.ts,
+// agent.ts). One batch of PUBLISHED_AT_BACKFILL_BATCH_SIZE per call; the
+// caller repeats until `remaining` is 0, same convention as
+// /api/admin/embeddings/backfill above. Every row this touches is
+// re-fetched through the SSRF-safe fetcher and the exact same extraction
+// logic the live pipeline uses (extractArticle), so a row backfilled here
+// and a row processed live get identical treatment.
+//
+// Idempotency: driven by published_at_checked_at IS NULL (see
+// listArticlesForPublishedAtBackfill's doc comment), not by published_at
+// itself — a page that genuinely has no date is marked checked so it's
+// never re-fetched on a later call, distinct from "haven't looked yet."
+app.post("/api/admin/articles/backfill-published", async (c) => {
+  const respectRobots = isRobotsRespectEnabled(c.env.ROBOTS_RESPECT);
+  const batch = await listArticlesForPublishedAtBackfill(
+    c.env.DB,
+    PUBLISHED_AT_BACKFILL_BATCH_SIZE,
+  );
+
+  let filled = 0;
+  let notFound = 0;
+  const checkedAt = new Date().toISOString();
+
+  for (const article of batch) {
+    try {
+      const robots = await robotsAllowsUrl(c.env.CACHE, respectRobots, article.url);
+      await honorCrawlDelay(robots.crawlDelaySeconds);
+      if (!robots.allowed) {
+        await markPublishedAtBackfillChecked(c.env.DB, article.id, null, checkedAt);
+        notFound += 1;
+        continue;
+      }
+
+      const html = await safeFetchText(article.url);
+      const { publishedAt } = extractArticle(html);
+      await markPublishedAtBackfillChecked(c.env.DB, article.id, publishedAt, checkedAt);
+      if (publishedAt) filled += 1;
+      else notFound += 1;
+    } catch (err) {
+      // Re-fetch failed (404, paywall redirect loop, host gone, SSRF guard
+      // rejection, timeout, ...) — leave published_at null but still mark
+      // checked, same "never blocks the batch, never wedges a future call"
+      // contract as embeddings backfill's own per-row catch.
+      console.warn(JSON.stringify({
+        event: "published_at_backfill_failed",
+        id: article.id,
+        error: err instanceof Error ? err.message : String(err),
+      }));
+      await markPublishedAtBackfillChecked(c.env.DB, article.id, null, checkedAt);
+      notFound += 1;
+    }
+  }
+
+  const remaining = await countArticlesForPublishedAtBackfill(c.env.DB);
+  return c.json(
+    { processed: batch.length, remaining, filled, notFound } satisfies PublishedAtBackfillResponse,
+  );
 });
 
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));

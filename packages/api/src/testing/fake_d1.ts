@@ -500,6 +500,32 @@ export class FakeD1 implements D1Database {
       return [{ count }];
     }
 
+    // Task 62: listArticlesForPublishedAtBackfill / countArticlesForPublishedAtBackfill
+    // — same "ready, non-archived, not yet checked" shape as the embeddings
+    // backfill queries above, keyed on published_at_checked_at instead of
+    // embedded_at.
+    if (sql.startsWith("SELECT id, url, source FROM articles")) {
+      const limit = values[0] as number;
+      return this.rows
+        .filter((r) =>
+          r.status === "ready" && r.archived === 0 && r.published_at_checked_at === null
+        )
+        .sort((a, b) => (a.added_at as string).localeCompare(b.added_at as string))
+        .slice(0, limit)
+        .map((r) => ({ id: r.id, url: r.url, source: r.source }));
+    }
+
+    if (
+      sql ===
+        "SELECT COUNT(*) as count FROM articles WHERE status = 'ready' AND archived = 0 AND published_at_checked_at IS NULL"
+    ) {
+      const count = this.rows.filter((r) =>
+        r.status === "ready" && r.archived === 0 && r.published_at_checked_at === null
+      )
+        .length;
+      return [{ count }];
+    }
+
     if (
       sql.startsWith(
         "SELECT id, url, source, faithfulness_verdict, summary_json, image_key, image_width, image_height FROM articles",

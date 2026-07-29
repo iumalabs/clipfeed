@@ -1,10 +1,12 @@
 import { parseHTML } from "linkedom";
 import { Readability } from "@mozilla/readability";
+import { extractPublishedDate } from "./publishedDate.ts";
 
 export interface ExtractedArticle {
   title: string | null;
   byline: string | null;
   textContent: string;
+  publishedAt: string | null;
 }
 
 const MAX_TEXT_CHARS = 30_000;
@@ -15,11 +17,35 @@ const MAX_TEXT_CHARS = 30_000;
 // relative to their actual article content. Stripping that noise on the raw
 // string before parseHTML() ever builds a DOM is far cheaper than letting
 // Readability score-and-discard it node by node.
-const NOISE_TAG_PATTERN = /<(script|style|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi;
+//
+// Task 62: `<script type="application/ld+json">` blocks are deliberately
+// spared — extractPublishedDate (below) reads `datePublished` out of them,
+// and they carry no visible text Readability would ever score as article
+// content, so keeping them costs nothing.
+const OTHER_NOISE_TAG_PATTERN = /<(style|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi;
 const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/g;
 
+function replaceUntilStable(input: string, pattern: RegExp, replacement: string): string {
+  let current = input;
+  while (true) {
+    const next = current.replace(pattern, replacement);
+    if (next === current) return next;
+    current = next;
+  }
+}
+
+function stripHtmlCommentsCompletely(input: string): string {
+  let current = input;
+  while (true) {
+    const withoutComments = replaceUntilStable(current, HTML_COMMENT_PATTERN, "");
+    const next = replaceUntilStable(withoutComments, OTHER_NOISE_TAG_PATTERN, "");
+    if (next === current) return next;
+    current = next;
+  }
+}
+
 function stripNoise(html: string): string {
-  return html.replace(HTML_COMMENT_PATTERN, "").replace(NOISE_TAG_PATTERN, "");
+  return stripHtmlCommentsCompletely(html);
 }
 
 // 1.5 MB — applied AFTER noise-stripping, so a legitimately large article
@@ -37,6 +63,21 @@ function capBytes(input: string, maxBytes: number): string {
 export function extractArticle(html: string, fallbackTitle?: string): ExtractedArticle {
   const safeHtml = capBytes(stripNoise(html), HTML_PARSE_CAP);
   const { document } = parseHTML(safeHtml);
+
+  // Remove executable/non-content scripts structurally, while preserving
+  // JSON-LD metadata scripts needed by extractPublishedDate.
+  for (const script of Array.from(document.querySelectorAll("script"))) {
+    const type = script.getAttribute("type")?.trim().toLowerCase();
+    if (type !== "application/ld+json") {
+      script.remove();
+    }
+  }
+
+  // Read before Readability runs — Readability.parse() mutates the DOM it's
+  // given (it can strip nodes while scoring/isolating article content), so
+  // any read that needs the page's original <head>/<time> markup has to
+  // happen first.
+  const publishedAt = extractPublishedDate(document);
 
   let title: string | null = null;
   let byline: string | null = null;
@@ -65,5 +106,6 @@ export function extractArticle(html: string, fallbackTitle?: string): ExtractedA
     title,
     byline,
     textContent: textContent.trim().slice(0, MAX_TEXT_CHARS),
+    publishedAt,
   };
 }

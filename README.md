@@ -1105,6 +1105,35 @@ sources may want a different value; raise it only with evidence (a real distribu
 genuinely-thin extractions are slipping through, since raising it blindly risks rejecting short
 bulletins/quotes as false positives.
 
+**Published date (`published_at`).** The card shows the source's original publication date (falling
+back to `added_at` — when the article entered this feed — when none is known; see
+`resolveCardDateIso` on the web side), while feed **sections** (Today/Yesterday/Earlier) always
+group by `added_at` regardless — the two are fully independent. `published_at` is populated two
+ways: during extraction, for every add path (manual/extension/telegram/agent), the pipeline reads
+the fetched page's own metadata — in order, JSON-LD `datePublished`,
+`<meta
+property="article:published_time">`, `<meta name="date">`, then the first `<time datetime>`
+(preferring one inside an `<article>` region) — the first candidate that also passes a sanity check
+wins (see `publishedDate.ts`'s `extractPublishedDate`/`normalizePublishedAt`: rejects anything more
+than a day in the future or dated before 1990, storing `NULL` rather than a bogus value).
+Separately, the agent path also writes the RSS candidate's own feed-reported date at insert time as
+a fallback — for Hacker News specifically this is when the story was POSTED TO HN, not when the
+linked article was published, so the page's own metadata (once extraction runs) always wins when
+both exist.
+
+**Backfill — `POST /api/admin/articles/backfill-published`** (Access-protected): re-fetches every
+`'ready'`, non-archived article with `published_at_checked_at IS NULL` (i.e. never looked at by the
+normal pipeline's extraction stage — every article going forward is stamped checked whether or not a
+date was found, so this only ever touches pre-existing rows), 20 per call, returns
+`{processed,
+remaining, filled, notFound}`. Same synchronous-paginated pattern as the
+embeddings/tag-normalize backfills — repeat until `remaining` is `0`. Respects
+`ROBOTS_RESPECT`/robots.txt the same way the manual-add endpoint does (a disallowed host counts
+toward `notFound`, never an error); a re-fetch failure (404, paywall, host gone) is logged and also
+counted `notFound`, never fails the batch. **Existing rows saved before this feature shipped have no
+`published_at` until this is run at least once** — same "the owner needs to call this after
+deploying" story as the embeddings backfill above.
+
 A candidate whose **title** starts with a known paywall marker is dropped the same way, before any
 fetch is attempted — LWN prefixes subscriber-only article titles with `"[$]"` in its own RSS feed,
 so this is a free, no-network signal (see `agent-pool.ts`'s `PAYWALL_TITLE_MARKERS`, an extendable

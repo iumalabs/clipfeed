@@ -699,6 +699,77 @@ Deno.test("runArticlePipeline: MIN_EXTRACTED_CHARS raised above the article's le
   assertEquals(llmCalled, false);
 });
 
+// Task 62: extraction's JSON-LD-sourced published date reaches the stored
+// row via PipelineSuccessUpdate.publishedAt.
+Deno.test("runArticlePipeline: extracted published date is persisted to the row", async () => {
+  const html = `<html><head><title>Example</title>
+    <script type="application/ld+json">{"@type":"Article","datePublished":"2026-07-10T08:00:00.000Z"}</script>
+    </head><body><article><h1>Example</h1><p>${
+    "Real article content for the pipeline test. ".repeat(20)
+  }</p></article></body></html>`;
+  const db = new ControllableD1();
+  const env = makePipelineEnv({
+    DB: db as unknown as D1Database,
+    ANTHROPIC_API_KEY: undefined,
+    AI: {
+      run(): Promise<unknown> {
+        return Promise.resolve({ response: VALID_SUMMARY });
+      },
+    },
+  });
+
+  await runArticlePipeline(env, {
+    id: "p-published-at",
+    url: "https://example.com/dated-article",
+    html,
+    requestTags: [],
+    addedVia: "manual",
+    alreadyEnforced: false,
+    source: null,
+    addedAt: "2026-07-11T00:00:00.000Z",
+  });
+
+  const row = db.rows.get("p-published-at");
+  assertEquals(row?.status, "ready");
+  assertEquals(row?.published_at, "2026-07-10T08:00:00.000Z");
+});
+
+// Task 62: when extraction finds nothing, publishedAt is omitted from
+// PipelineSuccessUpdate — the column must stay untouched (never overwritten
+// with null), preserving whatever the agent path may have already written
+// at insert time from the RSS candidate.
+Deno.test("runArticlePipeline: no published date found -> the column is left untouched, not nulled", async () => {
+  const db = new ControllableD1();
+  db.rows.set("p-no-published-at", {
+    id: "p-no-published-at",
+    published_at: "2026-01-01T00:00:00.000Z",
+  });
+  const env = makePipelineEnv({
+    DB: db as unknown as D1Database,
+    ANTHROPIC_API_KEY: undefined,
+    AI: {
+      run(): Promise<unknown> {
+        return Promise.resolve({ response: VALID_SUMMARY });
+      },
+    },
+  });
+
+  await runArticlePipeline(env, {
+    id: "p-no-published-at",
+    url: "https://example.com/no-date",
+    html: ARTICLE_HTML,
+    requestTags: [],
+    addedVia: "agent",
+    alreadyEnforced: false,
+    source: null,
+    addedAt: "2026-07-11T00:00:00.000Z",
+  });
+
+  const row = db.rows.get("p-no-published-at");
+  assertEquals(row?.status, "ready");
+  assertEquals(row?.published_at, "2026-01-01T00:00:00.000Z");
+});
+
 // Task 58 Part A's investigation traced every summarization call site
 // (runSummarizationForMode, summarize.ts's deriveSummarySpec/buildSystemPrompt)
 // and found none take addedVia as an argument — only `mode` (provider

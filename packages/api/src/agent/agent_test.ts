@@ -185,6 +185,37 @@ Deno.test("runAgentJob: end-to-end — 10 picks across 5 distinct sources insert
   }
 });
 
+// Task 62: the RSS candidate's own pubDate reaches the stored row —
+// ARTICLE_HTML (the page every candidate's URL resolves to in this fixture)
+// carries no date metadata of its own, so extraction finds nothing and the
+// pipeline's own publishedAt write is omitted (see PipelineSuccessUpdate),
+// leaving the RSS-sourced value agent.ts wrote at insert time untouched all
+// the way through to the final 'ready' row — proving the full
+// candidate -> insert -> pipeline -> persisted chain, not just one hop.
+Deno.test("runAgentJob: RSS candidate publishedAt reaches the final row unchanged (page has no date metadata)", async () => {
+  const restore = stubFetch();
+  try {
+    const env = makeEnv();
+    await runAgentJob(env, FIVE_RSS_SOURCES);
+
+    const db = env.DB as unknown as FakeD1;
+    const agentRows = db.rows.filter((r) => r.added_via === "agent");
+    assertEquals(agentRows.length, 10);
+
+    const now = Date.now();
+    for (const row of agentRows) {
+      const publishedAt = row.published_at as string | null;
+      assertEquals(publishedAt !== null, true);
+      const ms = new Date(publishedAt as string).getTime();
+      assertEquals(Number.isNaN(ms), false);
+      assertEquals(ms <= now, true);
+      assertEquals(now - ms < 5 * 60_000, true);
+    }
+  } finally {
+    restore();
+  }
+});
+
 Deno.test("runAgentJob: records a run marker on completion with the trigger and actual picks count (Task 36 Part B)", async () => {
   const restore = stubFetch();
   try {

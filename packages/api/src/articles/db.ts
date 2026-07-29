@@ -236,6 +236,12 @@ export interface InsertArticleInput {
   tags: string[];
   added_via: AddedVia;
   added_at: string;
+  // Task 62: only the agent path has a value at insert time (an RSS
+  // candidate's feed-reported date — see agent.ts) — every other add path
+  // doesn't know a publication date until extraction runs, which writes it
+  // later via PipelineSuccessUpdate.publishedAt instead. Already
+  // normalizePublishedAt-validated by the caller.
+  published_at?: string;
 }
 
 export async function insertPendingArticle(
@@ -243,8 +249,8 @@ export async function insertPendingArticle(
   input: InsertArticleInput,
 ): Promise<void> {
   await db.prepare(
-    `INSERT INTO articles (id, url, title, source, added_at, added_via, tags, status, archived)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0)`,
+    `INSERT INTO articles (id, url, title, source, added_at, added_via, tags, published_at, status, archived)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0)`,
   ).bind(
     input.id,
     input.url,
@@ -253,6 +259,7 @@ export async function insertPendingArticle(
     input.added_at,
     input.added_via,
     JSON.stringify(normalizeTags(input.tags)),
+    input.published_at ?? null,
   ).run();
 }
 
@@ -282,6 +289,14 @@ export interface PipelineSuccessUpdate {
   // where enforcement never fired (check disabled, verdict not 'fail',
   // already spent) never touches this column at all.
   faithfulnessEnforcedAt?: string;
+  // Task 62: set only when THIS run's extraction stage found a valid
+  // published date on the page (see extract.ts's ExtractedArticle,
+  // publishedDate.ts) — omitted (not just null) otherwise, so a run that
+  // found nothing never clobbers a date the agent path may have already
+  // written at insert time from the RSS candidate (see agent.ts). A page's
+  // own metadata is more authoritative than a feed's, so when both exist
+  // this one wins.
+  publishedAt?: string;
 }
 
 // Task 35 Part A: a fresh generation is always RU-only (see
@@ -312,6 +327,12 @@ export async function markArticleReady(
     "fail_class = NULL",
     "heal_attempts = 0",
     "en_generated_at = NULL",
+    // Task 62: stamped on every successful run, whether or not
+    // update.publishedAt found anything — this is what keeps
+    // POST /api/admin/articles/backfill-published's candidate query from
+    // re-touching a row extraction has already had a real look at (see
+    // that endpoint's WHERE clause).
+    "published_at_checked_at = ?",
   ];
   const binds: unknown[] = [
     update.full_text,
@@ -321,6 +342,7 @@ export async function markArticleReady(
     update.summary_ru,
     JSON.stringify(update.summary_json),
     JSON.stringify(normalizeTags(update.tags)),
+    new Date().toISOString(),
   ];
   if (update.faithfulness) {
     sets.push("faithfulness_verdict = ?", "faithfulness_json = ?", "faithfulness_checked_at = ?");
@@ -333,6 +355,10 @@ export async function markArticleReady(
   if (update.faithfulnessEnforcedAt) {
     sets.push("faithfulness_enforced_at = ?");
     binds.push(update.faithfulnessEnforcedAt);
+  }
+  if (update.publishedAt) {
+    sets.push("published_at = ?");
+    binds.push(update.publishedAt);
   }
   binds.push(id);
 
@@ -482,6 +508,65 @@ export async function countUnembeddedArticles(db: D1Database): Promise<number> {
     `SELECT COUNT(*) as count FROM articles WHERE status = 'ready' AND archived = 0 AND embedded_at IS NULL`,
   ).first<{ count: number }>();
   return row?.count ?? 0;
+}
+
+export interface PublishedAtBackfillCandidate {
+  id: string;
+  url: string;
+  source: string | null;
+}
+
+// Task 62: backfill source for POST /api/admin/articles/backfill-published —
+// every 'ready', non-archived row the normal pipeline hasn't already looked
+// at for a published date (`published_at_checked_at IS NULL` — see
+// markArticleReady, which stamps this on every successful run regardless of
+// outcome, so a row already checked, found-or-not, is never re-fetched).
+// This is what makes the backfill idempotent across repeated calls: a row's
+// candidacy is driven by "was it checked," never by "is published_at still
+// null" (which a genuinely date-less page would leave null forever,
+// otherwise wedging every future call on the same unfixable rows).
+export async function listArticlesForPublishedAtBackfill(
+  db: D1Database,
+  limit: number,
+): Promise<PublishedAtBackfillCandidate[]> {
+  const result = await db.prepare(
+    `SELECT id, url, source FROM articles
+     WHERE status = 'ready' AND archived = 0 AND published_at_checked_at IS NULL
+     ORDER BY added_at ASC
+     LIMIT ?`,
+  ).bind(limit).all<PublishedAtBackfillCandidate>();
+  return result.results ?? [];
+}
+
+// Same WHERE clause as listArticlesForPublishedAtBackfill, COUNT(*) instead
+// of a page — the backfill endpoint's {remaining} field.
+export async function countArticlesForPublishedAtBackfill(db: D1Database): Promise<number> {
+  const row = await db.prepare(
+    `SELECT COUNT(*) as count FROM articles
+     WHERE status = 'ready' AND archived = 0 AND published_at_checked_at IS NULL`,
+  ).first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
+// Marks a row checked (see listArticlesForPublishedAtBackfill's doc comment)
+// and writes publishedAt when the backfill found one — publishedAt is
+// deliberately nullable here (unlike PipelineSuccessUpdate.publishedAt,
+// which omits the field instead of passing null): this IS the definitive
+// attempt for a legacy row, so "found nothing" needs to be recorded, not
+// left to imply "never tried." An unconditional overwrite (not a
+// COALESCE-style "only if currently null") is safe: every row this is ever
+// called against was selected via published_at_checked_at IS NULL, which by
+// construction (see markArticleReady, the only other writer of either
+// column) means published_at is already null too.
+export async function markPublishedAtBackfillChecked(
+  db: D1Database,
+  id: string,
+  publishedAt: string | null,
+  checkedAt: string,
+): Promise<void> {
+  await db.prepare(
+    `UPDATE articles SET published_at_checked_at = ?, published_at = ? WHERE id = ?`,
+  ).bind(checkedAt, publishedAt, id).run();
 }
 
 export interface FaithfulnessStats {
