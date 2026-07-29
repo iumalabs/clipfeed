@@ -36,13 +36,22 @@ function stripHtmlCommentsCompletely(input: string): string {
       (match, attrs) => JSON_LD_TYPE_PATTERN.test(attrs) ? match : "",
     );
     const next = withoutNoiseScripts.replace(OTHER_NOISE_TAG_PATTERN, "");
+function stripOtherNoiseTagsCompletely(input: string): string {
+  let current = input;
+  while (true) {
+    const next = current.replace(OTHER_NOISE_TAG_PATTERN, "");
+    if (next === current) return next;
+    current = next;
+  }
+}
+
     if (next === current) return next;
     current = next;
   }
 }
 
 function stripNoise(html: string): string {
-  const withoutComments = stripHtmlCommentsCompletely(html);
+  return stripOtherNoiseTagsCompletely(withoutNoiseScripts);
   const withoutNoiseScripts = withoutComments.replace(
     SCRIPT_TAG_PATTERN,
     (match, attrs) => JSON_LD_TYPE_PATTERN.test(attrs) ? match : "",
