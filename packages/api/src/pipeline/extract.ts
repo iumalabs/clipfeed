@@ -25,11 +25,20 @@ const MAX_TEXT_CHARS = 30_000;
 const OTHER_NOISE_TAG_PATTERN = /<(style|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi;
 const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/g;
 
+function replaceUntilStable(input: string, pattern: RegExp, replacement: string): string {
+  let current = input;
+  while (true) {
+    const next = current.replace(pattern, replacement);
+    if (next === current) return next;
+    current = next;
+  }
+}
+
 function stripHtmlCommentsCompletely(input: string): string {
   let current = input;
   while (true) {
-    const withoutComments = current.replace(HTML_COMMENT_PATTERN, "");
-    const next = withoutComments.replace(OTHER_NOISE_TAG_PATTERN, "");
+    const withoutComments = replaceUntilStable(current, HTML_COMMENT_PATTERN, "");
+    const next = replaceUntilStable(withoutComments, OTHER_NOISE_TAG_PATTERN, "");
     if (next === current) return next;
     current = next;
   }
