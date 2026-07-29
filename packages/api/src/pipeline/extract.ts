@@ -22,7 +22,7 @@ const MAX_TEXT_CHARS = 30_000;
 // spared — extractPublishedDate (below) reads `datePublished` out of them,
 // and they carry no visible text Readability would ever score as article
 // content, so keeping them costs nothing.
-const SCRIPT_TAG_PATTERN = /<script\b([^>]*)>[\s\S]*?<\/script>/gi;
+const SCRIPT_TAG_PATTERN = /<script\b([^>]*)>[\s\S]*?<\/script\b[^>]*>/gi;
 const JSON_LD_TYPE_PATTERN = /type\s*=\s*["']application\/ld\+json["']/i;
 const OTHER_NOISE_TAG_PATTERN = /<(style|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi;
 const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/g;
