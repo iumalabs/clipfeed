@@ -22,8 +22,6 @@ const MAX_TEXT_CHARS = 30_000;
 // spared — extractPublishedDate (below) reads `datePublished` out of them,
 // and they carry no visible text Readability would ever score as article
 // content, so keeping them costs nothing.
-const SCRIPT_TAG_PATTERN = /<script\b([^>]*)>[\s\S]*?<\/script\b[^>]*>/gi;
-const JSON_LD_TYPE_PATTERN = /type\s*=\s*["']application\/ld\+json["']/i;
 const OTHER_NOISE_TAG_PATTERN = /<(style|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi;
 const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/g;
 
@@ -31,11 +29,7 @@ function stripHtmlCommentsCompletely(input: string): string {
   let current = input;
   while (true) {
     const withoutComments = current.replace(HTML_COMMENT_PATTERN, "");
-    const withoutNoiseScripts = withoutComments.replace(
-      SCRIPT_TAG_PATTERN,
-      (match, attrs) => JSON_LD_TYPE_PATTERN.test(attrs) ? match : "",
-    );
-    const next = withoutNoiseScripts.replace(OTHER_NOISE_TAG_PATTERN, "");
+    const next = withoutComments.replace(OTHER_NOISE_TAG_PATTERN, "");
     if (next === current) return next;
     current = next;
   }
@@ -60,6 +54,15 @@ function capBytes(input: string, maxBytes: number): string {
 export function extractArticle(html: string, fallbackTitle?: string): ExtractedArticle {
   const safeHtml = capBytes(stripNoise(html), HTML_PARSE_CAP);
   const { document } = parseHTML(safeHtml);
+
+  // Remove executable/non-content scripts structurally, while preserving
+  // JSON-LD metadata scripts needed by extractPublishedDate.
+  for (const script of Array.from(document.querySelectorAll("script"))) {
+    const type = script.getAttribute("type")?.trim().toLowerCase();
+    if (type !== "application/ld+json") {
+      script.remove();
+    }
+  }
 
   // Read before Readability runs — Readability.parse() mutates the DOM it's
   // given (it can strip nodes while scoring/isolating article content), so
