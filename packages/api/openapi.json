@@ -689,6 +689,22 @@
           "remaining": { "type": "integer", "description": "Repeat the call while this is > 0." }
         }
       },
+      "PublishedAtBackfillResponse": {
+        "type": "object",
+        "required": ["processed", "remaining", "filled", "notFound"],
+        "properties": {
+          "processed": { "type": "integer" },
+          "remaining": { "type": "integer", "description": "Repeat the call while this is > 0." },
+          "filled": {
+            "type": "integer",
+            "description": "Rows where a published date was found and written."
+          },
+          "notFound": {
+            "type": "integer",
+            "description": "Rows checked but left without a published date (no date on the page, the re-fetch failed, or the host's robots.txt disallowed it)."
+          }
+        }
+      },
       "TagsNormalizeResponse": {
         "type": "object",
         "required": ["updated"],
@@ -1565,6 +1581,26 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/EmbeddingsBackfillResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/articles/backfill-published": {
+      "post": {
+        "tags": ["admin"],
+        "summary": "Backfill published_at for pre-existing articles",
+        "description": "Synchronous-paginated: one batch of 20 per call. Repeat until `remaining` is 0. Idempotent — a row is only ever attempted once, distinguishing 'not yet checked' from 'checked but found nothing'. Each row is re-fetched through the SSRF-safe fetcher and the same extraction logic the live pipeline uses (JSON-LD datePublished, meta article:published_time, meta name=date, then <time datetime>), honoring robots.txt the same way the manual-add endpoint does.",
+        "operationId": "backfillPublishedAt",
+        "security": [{ "cloudflareAccess": [] }],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PublishedAtBackfillResponse" }
               }
             }
           },

@@ -333,3 +333,17 @@ export interface EmbeddingsBackfillResponse {
   processed: number;
   remaining: number;
 }
+
+// POST /api/admin/articles/backfill-published's response — same
+// synchronous-paginated pattern as EmbeddingsBackfillResponse above (repeat
+// while `remaining` > 0). `filled` and `notFound` partition `processed`:
+// every row this call looked at either got a published_at (filled) or
+// didn't (notFound — covers a genuinely date-less page, a failed re-fetch,
+// and a robots-disallowed host alike, since the visible outcome for all
+// three is the same "still no date").
+export interface PublishedAtBackfillResponse {
+  processed: number;
+  remaining: number;
+  filled: number;
+  notFound: number;
+}

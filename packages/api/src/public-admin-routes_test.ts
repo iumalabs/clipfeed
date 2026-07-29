@@ -485,6 +485,7 @@ Deno.test("admin routes: 401 auth_not_configured on every mutating route when Ac
     ["POST", "/api/admin/tags/normalize"],
     ["GET", "/api/admin/search?q=widget"],
     ["POST", "/api/admin/embeddings/backfill"],
+    ["POST", "/api/admin/articles/backfill-published"],
     ["GET", "/api/admin/curation/blocked"],
     ["DELETE", "/api/admin/curation/autoblock"],
   ];
@@ -517,6 +518,7 @@ Deno.test("admin routes: 401 unauthorized on every mutating route when configure
     ["POST", "/api/admin/tags/normalize"],
     ["GET", "/api/admin/search?q=widget"],
     ["POST", "/api/admin/embeddings/backfill"],
+    ["POST", "/api/admin/articles/backfill-published"],
     ["GET", "/api/admin/curation/blocked"],
     ["DELETE", "/api/admin/curation/autoblock"],
   ];
@@ -781,6 +783,206 @@ Deno.test("POST /api/admin/articles: the extension path (html supplied) never co
   // 202, not 409 — no server-side fetch happens for this path either way,
   // so there's nothing for robots.txt to gate.
   assertEquals(res.status, 202);
+});
+
+// --- Task 62: POST /api/admin/articles/backfill-published ---
+
+async function seedReadyArticle(
+  env: Env,
+  id: string,
+  url: string,
+  overrides: Record<string, unknown> = {},
+): Promise<void> {
+  await insertPendingArticle(env.DB, {
+    id,
+    url,
+    title: id,
+    source: "example.com",
+    tags: [],
+    added_via: "manual",
+    added_at: "2026-01-01T00:00:00.000Z",
+  });
+  const db = env.DB as unknown as FakeD1;
+  const row = db.rows.find((r) => r.id === id)!;
+  row.status = "ready";
+  Object.assign(row, overrides);
+}
+
+function stubBackfillFetch(
+  responses: Record<string, { status: number; html?: string } | "throw">,
+): () => void {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = ((input: string | URL | Request) => {
+    const url = input.toString();
+    const entry = responses[url];
+    if (entry === undefined) throw new Error(`unexpected fetch in backfill test: ${url}`);
+    if (entry === "throw") return Promise.reject(new Error("network down"));
+    return Promise.resolve(
+      new Response(entry.html ?? "", {
+        status: entry.status,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = originalFetch;
+  };
+}
+
+Deno.test("POST /api/admin/articles/backfill-published: finds a JSON-LD date, marks the row filled and checked", async () => {
+  const { env, authHeaders } = await makeOwnerContext({ ROBOTS_RESPECT: "false" });
+  const ctx = makeExecutionContext().ctx;
+  await seedReadyArticle(env, "bf-dated", "https://example.com/bf-dated");
+
+  const restore = stubBackfillFetch({
+    "https://example.com/bf-dated": {
+      status: 200,
+      html:
+        `<html><head><script type="application/ld+json">{"@type":"Article","datePublished":"2026-06-01T00:00:00.000Z"}</script></head><body><article><p>${
+          "content ".repeat(50)
+        }</p></article></body></html>`,
+    },
+  });
+  try {
+    const res = await app.request(
+      "/api/admin/articles/backfill-published",
+      { method: "POST", headers: authHeaders },
+      env,
+      ctx,
+    );
+    assertEquals(res.status, 200);
+    const body = await res.json();
+    assertEquals(body, { processed: 1, remaining: 0, filled: 1, notFound: 0 });
+
+    const db = env.DB as unknown as FakeD1;
+    const row = db.rows.find((r) => r.id === "bf-dated")!;
+    assertEquals(row.published_at, "2026-06-01T00:00:00.000Z");
+    assertEquals(
+      row.published_at_checked_at !== null && row.published_at_checked_at !== undefined,
+      true,
+    );
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("POST /api/admin/articles/backfill-published: no date on the page -> notFound, checked, published_at stays null", async () => {
+  const { env, authHeaders } = await makeOwnerContext({ ROBOTS_RESPECT: "false" });
+  const ctx = makeExecutionContext().ctx;
+  await seedReadyArticle(env, "bf-undated", "https://example.com/bf-undated");
+
+  const restore = stubBackfillFetch({
+    "https://example.com/bf-undated": {
+      status: 200,
+      html: `<html><body><article><p>${"content ".repeat(50)}</p></article></body></html>`,
+    },
+  });
+  try {
+    const res = await app.request(
+      "/api/admin/articles/backfill-published",
+      { method: "POST", headers: authHeaders },
+      env,
+      ctx,
+    );
+    const body = await res.json();
+    assertEquals(body, { processed: 1, remaining: 0, filled: 0, notFound: 1 });
+
+    const db = env.DB as unknown as FakeD1;
+    const row = db.rows.find((r) => r.id === "bf-undated")!;
+    assertEquals(row.published_at, null);
+    assertEquals(
+      row.published_at_checked_at !== null && row.published_at_checked_at !== undefined,
+      true,
+    );
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("POST /api/admin/articles/backfill-published: a re-fetch failure is counted, not thrown, and the row is still marked checked", async () => {
+  const { env, authHeaders } = await makeOwnerContext({ ROBOTS_RESPECT: "false" });
+  const ctx = makeExecutionContext().ctx;
+  await seedReadyArticle(env, "bf-fail", "https://example.com/bf-fail");
+
+  const restore = stubBackfillFetch({ "https://example.com/bf-fail": "throw" });
+  try {
+    const res = await app.request(
+      "/api/admin/articles/backfill-published",
+      { method: "POST", headers: authHeaders },
+      env,
+      ctx,
+    );
+    assertEquals(res.status, 200);
+    const body = await res.json();
+    assertEquals(body, { processed: 1, remaining: 0, filled: 0, notFound: 1 });
+
+    const db = env.DB as unknown as FakeD1;
+    const row = db.rows.find((r) => r.id === "bf-fail")!;
+    assertEquals(row.published_at, null);
+    assertEquals(
+      row.published_at_checked_at !== null && row.published_at_checked_at !== undefined,
+      true,
+    );
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("POST /api/admin/articles/backfill-published: a robots-disallowed host is skipped without ever being fetched", async () => {
+  const { env, authHeaders } = await makeOwnerContext({ ROBOTS_RESPECT: "true" });
+  const ctx = makeExecutionContext().ctx;
+  await seedReadyArticle(env, "bf-blocked", "https://blocked.example/bf-blocked");
+  await env.CACHE.put("robots:blocked.example", "User-agent: *\nDisallow: /");
+
+  // No responses registered — a fetch to this URL would throw "unexpected
+  // fetch", proving the robots gate short-circuits before any request.
+  const restore = stubBackfillFetch({});
+  try {
+    const res = await app.request(
+      "/api/admin/articles/backfill-published",
+      { method: "POST", headers: authHeaders },
+      env,
+      ctx,
+    );
+    assertEquals(res.status, 200);
+    const body = await res.json();
+    assertEquals(body, { processed: 1, remaining: 0, filled: 0, notFound: 1 });
+
+    const db = env.DB as unknown as FakeD1;
+    const row = db.rows.find((r) => r.id === "bf-blocked")!;
+    assertEquals(row.published_at, null);
+    assertEquals(
+      row.published_at_checked_at !== null && row.published_at_checked_at !== undefined,
+      true,
+    );
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("POST /api/admin/articles/backfill-published: idempotent — a row already checked is never re-selected", async () => {
+  const { env, authHeaders } = await makeOwnerContext({ ROBOTS_RESPECT: "false" });
+  const ctx = makeExecutionContext().ctx;
+  await seedReadyArticle(env, "bf-already-checked", "https://example.com/bf-already-checked", {
+    published_at_checked_at: "2026-01-05T00:00:00.000Z",
+    published_at: null,
+  });
+
+  // No responses registered — a fetch attempt would throw, proving the
+  // already-checked row is excluded from the candidate query entirely.
+  const restore = stubBackfillFetch({});
+  try {
+    const res = await app.request(
+      "/api/admin/articles/backfill-published",
+      { method: "POST", headers: authHeaders },
+      env,
+      ctx,
+    );
+    const body = await res.json();
+    assertEquals(body, { processed: 0, remaining: 0, filled: 0, notFound: 0 });
+  } finally {
+    restore();
+  }
 });
 
 // --- Task 48 Part 3: DELETE /api/admin/articles/:id/image ---

@@ -43,3 +43,35 @@ Deno.test("extractArticle: caps parser input at HTML_PARSE_CAP bytes even for le
 
   assertEquals(result.title, "Fallback Title");
 });
+
+// --- Task 62: published-date extraction wired into extractArticle ---
+
+Deno.test("extractArticle: publishedAt is read from JSON-LD, which survives noise-stripping", () => {
+  const html = `<html><head>
+    <script type="application/ld+json">{"@type":"Article","datePublished":"2026-07-10T08:00:00.000Z"}</script>
+  </head><body><article><p>${"Real article content. ".repeat(20)}</p></article></body></html>`;
+
+  const result = extractArticle(html);
+
+  assertEquals(result.publishedAt, "2026-07-10T08:00:00.000Z");
+});
+
+Deno.test("extractArticle: a non-JSON-LD <script> block is still stripped as noise", () => {
+  const html = `<html><head>
+    <script>window.trackingJunk = ${"x".repeat(1000)};</script>
+  </head><body><article><p>${"Real article content. ".repeat(20)}</p></article></body></html>`;
+
+  const result = extractArticle(html);
+
+  assertEquals(result.textContent.includes("trackingJunk"), false);
+});
+
+Deno.test("extractArticle: publishedAt is null when no date metadata is present", () => {
+  const html = `<html><body><article><p>${
+    "Real article content. ".repeat(20)
+  }</p></article></body></html>`;
+
+  const result = extractArticle(html);
+
+  assertEquals(result.publishedAt, null);
+});

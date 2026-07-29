@@ -572,6 +572,11 @@ export async function runArticlePipeline(env: Env, input: PipelineInput): Promis
         }
         : undefined,
       faithfulnessEnforcedAt: faithfulness.enforcementSpent ? new Date().toISOString() : undefined,
+      // Task 62: omitted (not overwritten with null) when extraction found
+      // nothing — see PipelineSuccessUpdate.publishedAt's doc comment for
+      // why that matters (the agent path may have already written a
+      // fallback value at insert time).
+      publishedAt: extracted.publishedAt ?? undefined,
     });
     logStage(input.id, stage, persistStart);
 
