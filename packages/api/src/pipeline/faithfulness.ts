@@ -5,8 +5,14 @@ import type {
   FaithfulnessVerdict,
   SummaryJson,
 } from "@clipfeed/shared/types";
+import {
+  buildFaithfulnessClaimTexts,
+  type FaithfulnessClaimInput,
+} from "../../../shared/src/faithfulness-claims.ts";
 import { stripJsonFences, withTimeout } from "./summarize.ts";
 import { normalizeAiChatResponse } from "./ai-response.ts";
+
+export type { FaithfulnessClaimInput };
 
 // A SEPARATE verification pass, run after a summary validates but before
 // the article is marked 'ready' (see pipeline.ts's runFaithfulnessStage):
@@ -47,40 +53,12 @@ export function resolveFaithfulnessJudgeModel(raw: string | undefined): string {
   return trimmed === "" ? DEFAULT_FAITHFULNESS_JUDGE_MODEL : trimmed;
 }
 
-export interface FaithfulnessClaimInput {
-  i: number;
-  text: string;
-}
-
-// Builds the claim set to verify. Task 35 Part A: switched from EN to RU
-// fields — since the owner's default RU-only generation (see summarize.ts)
-// no longer produces _en fields at all for a fresh summary, EN can no
-// longer be assumed to exist here (a lazily-translated or pre-Task-35 row
-// might have it, most rows won't). RU is the field that's ALWAYS present,
-// so it's now the one thing this check can rely on across every article.
-//
-// Consequence (documented in README "Faithfulness check"): the source
-// article is USUALLY English, so this judge call is now typically
-// cross-lingual (RU summary claims checked against an EN source) — a
-// meaningfully harder task for the judge than same-language verification,
-// which is exactly why buildFaithfulnessJudgePrompt below now states this
-// explicitly and asks the judge to verify MEANING rather than literal
-// wording. Verdict quality (false-positive/false-negative rate) may be
-// somewhat worse than the old same-language (EN/EN) check — this is a
-// known, accepted tradeoff, not a bug; the owner watches weak/fail rates in
-// GET /api/admin/health-report.
-//
-// Claim granularity is deliberately coarse: one claim per tldr/bullet/body
-// -paragraph array element, not split into individual sentences or
-// sub-assertions. A sentence-level claim set would let the judge localize a
-// mismatch more precisely, but this app runs the check on every single
-// article when enabled — keeping the claim count small (typically ~8-12:
-// 1 tldr + 4-7 bullets + 2-4 paragraphs) keeps the judge prompt short and
-// the call cheap, which matters more here than sentence-level precision.
-export function buildFaithfulnessClaims(summary: SummaryJson): FaithfulnessClaimInput[] {
-  const units = [summary.tldr_ru, ...summary.bullets_ru, ...summary.body_ru];
-  return units.map((text, idx) => ({ i: idx + 1, text }));
-}
+// Builds the claim set to verify — the ordering/RU-only rationale now lives
+// in shared/src/faithfulness-claims.ts's own doc comment (moved there so
+// the SPA's owner-only per-claim detail view can resolve a judged claim
+// index back to its text using the exact same mapping, with zero risk of
+// the two implementations drifting apart).
+export const buildFaithfulnessClaims = buildFaithfulnessClaimTexts;
 
 // Strict, citation-forced (quote the deciding source span) to reduce judge
 // hallucination — the judge must ground every verdict in actual source

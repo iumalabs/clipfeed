@@ -20,7 +20,7 @@ import {
   visitorFailureText,
 } from "../lib/content/failureDisplay.ts";
 import { scrollTitleIntoView } from "../lib/ui/scroll.ts";
-import { faithfulnessCounts, visibleFaithfulnessBadgeInfo } from "../lib/content/faithfulness.ts";
+import { resolveFlaggedClaims, visibleFaithfulnessBadgeInfo } from "../lib/content/faithfulness.ts";
 import { Tooltip } from "./Tooltip.tsx";
 import { usePrefersReducedMotion, withMotionClass } from "../lib/ui/motion.ts";
 import { pendingCardVariant } from "../lib/feed/agentBatch.ts";
@@ -454,11 +454,16 @@ export function ArticleCard(props: ArticleCardProps) {
   // pipeline, and the old copy implied doubt about the ORIGINAL article
   // rather than our own summary. Owner-mode only, for both 'weak' and
   // 'fail' ('pass'/null still get nothing at all, as before). The
-  // per-claim detail line further below stays owner-only too, unchanged.
+  // per-claim detail block further below stays owner-only too, unchanged.
   const verdict = article.faithfulness_verdict;
   const badgeInfo = visibleFaithfulnessBadgeInfo(dict, verdict, isOwner);
   const faithfulnessBadgeText = badgeInfo?.badgeText ?? null;
-  const faithfulnessDetailCounts = faithfulnessCounts(article.faithfulness_json);
+  // Product follow-up to Task 42 Part B: a plain unsupported/contradicted
+  // COUNT told the owner something was flagged but gave them nothing to act
+  // on. This resolves each flagged judge claim back to the actual summary
+  // sentence it refers to (see faithfulness.ts's resolveFlaggedClaims) so
+  // the footnote below can show what was actually questioned.
+  const flaggedClaims = resolveFlaggedClaims(article.summary_json, article.faithfulness_json);
 
   return (
     <article
@@ -601,12 +606,20 @@ export function ArticleCard(props: ArticleCardProps) {
               {" "}
               {dict.summaryAddedVia} {viaLabel(dict, article.added_via)}
             </p>
-            {isOwner && faithfulnessBadgeText && faithfulnessDetailCounts && (
-              <p class="card-footer-text faithfulness-footnote">
-                {dict.faithfulnessDetailLabel}: {faithfulnessBadgeText} —{" "}
-                {dict.faithfulnessUnsupportedLabel} {faithfulnessDetailCounts.unsupported},{" "}
-                {dict.faithfulnessContradictedLabel} {faithfulnessDetailCounts.contradicted}
-              </p>
+            {isOwner && faithfulnessBadgeText && flaggedClaims.length > 0 && (
+              <div class="card-footer-text faithfulness-footnote">
+                <p>{dict.faithfulnessDetailLabel}: {faithfulnessBadgeText}</p>
+                <ul class="faithfulness-claim-list">
+                  {flaggedClaims.map((claim, i) => (
+                    <li key={i} class="faithfulness-claim">
+                      {claim.verdict === "contradicted"
+                        ? dict.faithfulnessContradictedLabel
+                        : dict.faithfulnessUnsupportedLabel} "{claim.text}"
+                    </li>
+                  ))}
+                </ul>
+                <p>{dict.faithfulnessRegenerateHint}</p>
+              </div>
             )}
             <div class="card-footer-actions">
               {isOwner && (

@@ -927,6 +927,22 @@ ul {
   color: var(--warn);
 }
 
+.faithfulness-footnote p {
+  margin: 4px 0;
+}
+
+.faithfulness-claim-list {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.faithfulness-claim {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* --- Tooltip (Task 34 Part B) — a small, dependency-free popover. The
    trigger (badge) itself keeps its own class/styling; these rules only
    add the wrapper's positioning context and the popover's own look. --- */

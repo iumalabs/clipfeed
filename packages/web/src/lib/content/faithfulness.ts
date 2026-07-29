@@ -1,20 +1,38 @@
-import type { FaithfulnessJson, FaithfulnessVerdict } from "@clipfeed/shared/types";
+import type { FaithfulnessJson, FaithfulnessVerdict, SummaryJson } from "@clipfeed/shared/types";
+import { buildFaithfulnessClaimTexts } from "../../../../shared/src/faithfulness-claims.ts";
 import type { Dictionary } from "../../i18n/i18n.ts";
 
-// Pure helper reading the judge's per-claim detail out of the owner-only
-// faithfulness_json field (see ArticleCard.tsx's owner-mode footnote under
-// the source attribution line) — null for the {error} shape (judge
-// unparseable) or when the field itself is null (check disabled/not run/
-// visitor mode, where this field is always stripped — see PublicArticle in
-// @clipfeed/shared/types).
-export function faithfulnessCounts(
+export interface FlaggedFaithfulnessClaim {
+  text: string;
+  verdict: "unsupported" | "contradicted";
+  evidence: string;
+}
+
+// Reads the judge's per-claim detail out of the owner-only faithfulness_json
+// field (see ArticleCard.tsx's owner-mode footnote) and resolves each
+// flagged claim back to the actual summary sentence it refers to — a plain
+// unsupported/contradicted COUNT tells the owner something was flagged but
+// gives them nothing to act on; the actual sentence does. Uses the same
+// claim-index ordering the API's own remediation retry relies on (see
+// shared/src/faithfulness-claims.ts's doc comment for why that lives in
+// shared/ rather than being duplicated here). Returns [] for the {error}
+// shape (judge unparseable), when the field itself is null (check disabled/
+// not run/visitor-stripped — see PublicArticle in @clipfeed/shared/types),
+// when summary_json is missing, or when every claim came back 'supported'.
+export function resolveFlaggedClaims(
+  summary: SummaryJson | null,
   json: FaithfulnessJson | null,
-): { unsupported: number; contradicted: number } | null {
-  if (!json || !("claims" in json)) return null;
-  return {
-    unsupported: json.claims.filter((c) => c.verdict === "unsupported").length,
-    contradicted: json.claims.filter((c) => c.verdict === "contradicted").length,
-  };
+): FlaggedFaithfulnessClaim[] {
+  if (!summary || !json || !("claims" in json)) return [];
+  const textByIndex = new Map(buildFaithfulnessClaimTexts(summary).map((c) => [c.i, c.text]));
+  const flagged: FlaggedFaithfulnessClaim[] = [];
+  for (const claim of json.claims) {
+    if (claim.verdict === "supported") continue;
+    const text = textByIndex.get(claim.i);
+    if (!text) continue;
+    flagged.push({ text, verdict: claim.verdict, evidence: claim.evidence });
+  }
+  return flagged;
 }
 
 export interface FaithfulnessBadgeInfo {
