@@ -162,15 +162,25 @@ export type ArticleListItem = Omit<Article, "full_text">;
 // GET /api/articles/:id (public) shape: excludes full_text (the article's
 // full extracted text — publicly re-serving that would be a reprint, not a
 // summary-with-link), the raw error string (may carry internal detail like
-// upstream URLs/stack fragments), and faithfulness_json (the judge's
-// per-claim detail — owner-only diagnostic, see faithfulness.ts). has_error
-// is enough for a public reader to know a retry is pending;
-// faithfulness_verdict IS still exposed publicly — the whole point of the
-// caution badge (see ArticleCard.tsx) is transparency for every reader, not
-// just the owner. The full row (every field included) is only available to
+// upstream URLs/stack fragments), faithfulness_json (the judge's per-claim
+// detail — owner-only diagnostic, see faithfulness.ts), and
+// faithfulness_verdict itself. has_error is enough for a public reader to
+// know a retry is pending. faithfulness_verdict used to be exposed publicly
+// (the caution badge was originally reader-facing), but Task 42 Part B
+// turned the badge into an owner-only internal quality signal — the field
+// is now stripped at the wire level too, matching what the SPA already does
+// (see ArticleCard.tsx's isOwner gate), so a visitor's raw response can't
+// carry it either. The full row (every field included) is only available to
 // the owner, via GET /api/admin/articles/:id.
 export type PublicArticle =
-  & Omit<Article, "full_text" | "error" | "faithfulness_json" | "faithfulness_enforced_at">
+  & Omit<
+    Article,
+    | "full_text"
+    | "error"
+    | "faithfulness_json"
+    | "faithfulness_enforced_at"
+    | "faithfulness_verdict"
+  >
   & { has_error: boolean };
 
 export interface CreateArticleRequest {

@@ -215,6 +215,22 @@ Deno.test("wire contract: GET /api/articles item contains every PublicArticle fi
   assertHasAllKeys(body.items[0], PUBLIC_ARTICLE_KEYS, "GET /api/articles item");
 });
 
+// The faithfulness badge became an owner-only internal quality signal (Task
+// 42 Part B), but the wire response itself kept shipping faithfulness_verdict
+// to every caller until this was caught — an anonymous visitor's raw JSON
+// carried it even though the SPA never rendered it for them. This asserts
+// the fix at the actual HTTP boundary, not just via PUBLIC_ARTICLE_KEYS
+// (a presence-only check that wouldn't have caught an extra leaked field).
+Deno.test("wire contract: GET /api/articles item does NOT carry faithfulness_verdict", async () => {
+  const env = makeEnv();
+  await seedReadyArticle(env, "contract-no-verdict-leak");
+  const res = await app.request("/api/articles", {}, env, makeExecutionContext());
+  assertEquals(res.status, 200);
+  const body = await res.json() as { items: object[] };
+  assertEquals(body.items.length > 0, true);
+  assertEquals("faithfulness_verdict" in body.items[0], false);
+});
+
 Deno.test("wire contract: GET /api/articles/:id contains every PublicArticle field", async () => {
   const env = makeEnv();
   await seedReadyArticle(env, "contract-public-detail");

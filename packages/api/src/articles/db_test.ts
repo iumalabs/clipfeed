@@ -1375,7 +1375,7 @@ Deno.test("getArticlesByIds: an empty id list returns an empty array without que
 
 // --- Public-shape redaction (toPublicArticle/toPublicListItem) ---
 
-Deno.test("toPublicArticle: strips faithfulness_json but keeps faithfulness_verdict", () => {
+Deno.test("toPublicArticle: strips faithfulness_json and faithfulness_verdict", () => {
   const article: Article = {
     id: "a1",
     url: "https://example.com/a1",
@@ -1413,13 +1413,13 @@ Deno.test("toPublicArticle: strips faithfulness_json but keeps faithfulness_verd
   const pub = toPublicArticle(article);
   assertEquals("faithfulness_json" in pub, false);
   assertEquals("faithfulness_enforced_at" in pub, false);
+  assertEquals("faithfulness_verdict" in pub, false);
   assertEquals("full_text" in pub, false);
   assertEquals("error" in pub, false);
-  assertEquals(pub.faithfulness_verdict, "weak");
   assertEquals(pub.has_error, false);
 });
 
-Deno.test("toPublicListItem: strips faithfulness_json but keeps faithfulness_verdict", () => {
+Deno.test("toPublicListItem: strips faithfulness_json and faithfulness_verdict", () => {
   const item: ArticleListItem = {
     id: "a2",
     url: "https://example.com/a2",
@@ -1456,7 +1456,7 @@ Deno.test("toPublicListItem: strips faithfulness_json but keeps faithfulness_ver
   const pub = toPublicListItem(item);
   assertEquals("faithfulness_json" in pub, false);
   assertEquals("faithfulness_enforced_at" in pub, false);
+  assertEquals("faithfulness_verdict" in pub, false);
   assertEquals("error" in pub, false);
-  assertEquals(pub.faithfulness_verdict, "fail");
   assertEquals(pub.has_error, true);
 });

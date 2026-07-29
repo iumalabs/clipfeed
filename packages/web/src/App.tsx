@@ -90,15 +90,16 @@ function computeTagFacets(articles: ArticleListItem[]) {
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
 
-// Owner mode fetches the full row (real `error`/`faithfulness_json`
-// included) from /api/admin/articles; visitor mode fetches the redacted
-// public shape from /api/articles and fills in `error: null` and
-// `faithfulness_json: null` since neither is genuinely available —
-// ArticleCard never renders either field directly in visitor mode (error
-// uses fail_class instead, which both shapes carry; faithfulness_json's
-// per-claim detail is owner-mode-only, see ArticleCard's
-// faithfulness-footnote), so these nulls are inert, not a re-introduction
-// of the stale-empty-error bug this same field once had.
+// Owner mode fetches the full row (real `error`/`faithfulness_json`/
+// `faithfulness_verdict` included) from /api/admin/articles; visitor mode
+// fetches the redacted public shape from /api/articles and fills in
+// `error: null`, `faithfulness_json: null`, and `faithfulness_verdict: null`
+// since none is genuinely available — ArticleCard never renders any of them
+// directly in visitor mode (error uses fail_class instead, which both shapes
+// carry; faithfulness_verdict/faithfulness_json are owner-mode-only, gated by
+// isOwner before ArticleCard ever reads them — see
+// visibleFaithfulnessBadgeInfo), so these nulls are inert, not a
+// re-introduction of the stale-empty-error bug this same field once had.
 async function fetchArticleList(
   isOwner: boolean,
   params: ArticlesQueryParams,
@@ -109,6 +110,7 @@ async function fetchArticleList(
     items: res.items.map((item) => ({
       ...item,
       error: null,
+      faithfulness_verdict: null,
       faithfulness_json: null,
       faithfulness_enforced_at: null,
     })),
@@ -145,6 +147,7 @@ async function fetchSemanticSearch(isOwner: boolean, query: string): Promise<Art
   return res.items.map((item) => ({
     ...item.article,
     error: null,
+    faithfulness_verdict: null,
     faithfulness_json: null,
     faithfulness_enforced_at: null,
   }));
@@ -157,7 +160,13 @@ async function fetchSemanticSearch(isOwner: boolean, query: string): Promise<Art
 async function fetchArticleById(isOwner: boolean, id: string): Promise<ArticleListItem> {
   if (isOwner) return await getAdminArticle(id);
   const article = await getArticle(id);
-  return { ...article, error: null, faithfulness_json: null, faithfulness_enforced_at: null };
+  return {
+    ...article,
+    error: null,
+    faithfulness_verdict: null,
+    faithfulness_json: null,
+    faithfulness_enforced_at: null,
+  };
 }
 
 function computeSourceFacets(articles: ArticleListItem[]) {
