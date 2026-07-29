@@ -432,8 +432,11 @@ rather than our own summary. `'pass'` and `null` (disabled/never checked) still 
 for everyone. The badge is a tooltip trigger (`Tooltip.tsx`/`lib/tooltip.ts`, no external library)
 explaining in plain language what the badge means and that a separate AI model did the checking —
 hover or keyboard-focus on desktop, tap on touch (dismissed by an outside tap or Escape). The
-owner-only expanded-card footnote additionally shows the unsupported/contradicted claim counts from
-the judge's full response.
+owner-only expanded-card footnote additionally resolves each unsupported/contradicted judge claim
+back to the actual summary sentence it flagged (not just a count — a bare number gave the owner
+nothing to act on) using the same claim-index ordering the automatic-remediation retry relies on
+(`shared/src/faithfulness-claims.ts`), plus a hint that the 🔁 resummarize button (present on every
+card regardless of verdict) sometimes clears the flag by producing a different summary.
 
 **Spot-checking the judge:** `POST /api/admin/articles/:id/reverify` (owner-only, `202`) re-runs
 only the faithfulness stage against an already-summarized article's stored text and summary — no

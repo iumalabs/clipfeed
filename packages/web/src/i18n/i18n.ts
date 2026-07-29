@@ -57,6 +57,7 @@ export interface Dictionary {
   faithfulnessDetailLabel: string;
   faithfulnessUnsupportedLabel: string;
   faithfulnessContradictedLabel: string;
+  faithfulnessRegenerateHint: string;
   readMore: string;
   tldrLabel: string;
   keyTakeawaysHeading: string;
@@ -192,8 +193,9 @@ const ru: Dictionary = {
     "Выжимка может содержать неточности: значительная часть утверждений не подтверждается оригиналом или противоречит ему.",
   faithfulnessTooltipTrailer: "Проверку делает отдельная ИИ-модель.",
   faithfulnessDetailLabel: "Проверка достоверности",
-  faithfulnessUnsupportedLabel: "не подтверждено",
-  faithfulnessContradictedLabel: "противоречит",
+  faithfulnessUnsupportedLabel: "не подтверждено:",
+  faithfulnessContradictedLabel: "противоречит источнику:",
+  faithfulnessRegenerateHint: "Кнопка 🔁 ниже пересоберёт пересказ — иногда это убирает флаг.",
   readMore: "читать далее",
   tldrLabel: "TL;DR",
   keyTakeawaysHeading: "Итог",
@@ -329,8 +331,10 @@ const en: Dictionary = {
     "The summary may contain inaccuracies: a significant portion of its claims aren't supported by the original or contradict it.",
   faithfulnessTooltipTrailer: "Checked by a separate AI model.",
   faithfulnessDetailLabel: "Faithfulness check",
-  faithfulnessUnsupportedLabel: "unsupported",
-  faithfulnessContradictedLabel: "contradicted",
+  faithfulnessUnsupportedLabel: "unsupported:",
+  faithfulnessContradictedLabel: "contradicts the source:",
+  faithfulnessRegenerateHint:
+    "The 🔁 button below regenerates the summary — this sometimes clears the flag.",
   readMore: "read more",
   tldrLabel: "TL;DR",
   keyTakeawaysHeading: "Key points",

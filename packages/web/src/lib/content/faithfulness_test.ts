@@ -1,38 +1,102 @@
 import { assertEquals } from "@std/assert";
 import {
   faithfulnessBadgeInfo,
-  faithfulnessCounts,
+  resolveFlaggedClaims,
   visibleFaithfulnessBadgeInfo,
 } from "./faithfulness.ts";
 import { dictionaries } from "../../i18n/i18n.ts";
+import type { SummaryJson } from "@clipfeed/shared/types";
 
-Deno.test("faithfulnessCounts: null json (disabled/not run/visitor mode) -> null", () => {
-  assertEquals(faithfulnessCounts(null), null);
+const SAMPLE_SUMMARY: SummaryJson = {
+  title_ru: "Заголовок",
+  tldr_ru: "Краткое содержание.",
+  body_ru: ["Первый абзац.", "Второй абзац."],
+  bullets_ru: ["Пункт один.", "Пункт два."],
+  tags: ["testing"],
+  lang_original: "en",
+};
+
+Deno.test("resolveFlaggedClaims: null summary -> []", () => {
+  assertEquals(
+    resolveFlaggedClaims(null, {
+      claims: [{ i: 1, verdict: "unsupported", evidence: "" }],
+      notes: "",
+    }),
+    [],
+  );
 });
 
-Deno.test("faithfulnessCounts: error shape (judge unparseable) -> null", () => {
-  assertEquals(faithfulnessCounts({ error: "judge unparseable" }), null);
+Deno.test("resolveFlaggedClaims: null json (disabled/not run/visitor mode) -> []", () => {
+  assertEquals(resolveFlaggedClaims(SAMPLE_SUMMARY, null), []);
 });
 
-Deno.test("faithfulnessCounts: counts unsupported/contradicted claims, ignoring supported ones", () => {
-  const counts = faithfulnessCounts({
+Deno.test("resolveFlaggedClaims: error shape (judge unparseable) -> []", () => {
+  assertEquals(resolveFlaggedClaims(SAMPLE_SUMMARY, { error: "judge unparseable" }), []);
+});
+
+Deno.test("resolveFlaggedClaims: all-supported claims -> []", () => {
+  assertEquals(
+    resolveFlaggedClaims(SAMPLE_SUMMARY, {
+      claims: [{ i: 1, verdict: "supported", evidence: "" }],
+      notes: "",
+    }),
+    [],
+  );
+});
+
+Deno.test("resolveFlaggedClaims: resolves an unsupported bullet claim to its actual text (claim 2 = bullets_ru[0])", () => {
+  const flagged = resolveFlaggedClaims(SAMPLE_SUMMARY, {
     claims: [
       { i: 1, verdict: "supported", evidence: "" },
-      { i: 2, verdict: "unsupported", evidence: "" },
-      { i: 3, verdict: "unsupported", evidence: "" },
-      { i: 4, verdict: "contradicted", evidence: "" },
+      { i: 2, verdict: "unsupported", evidence: "no matching source span" },
     ],
     notes: "",
   });
-  assertEquals(counts, { unsupported: 2, contradicted: 1 });
+  assertEquals(flagged, [
+    { text: "Пункт один.", verdict: "unsupported", evidence: "no matching source span" },
+  ]);
 });
 
-Deno.test("faithfulnessCounts: all-supported claims -> zero counts, not null", () => {
-  const counts = faithfulnessCounts({
-    claims: [{ i: 1, verdict: "supported", evidence: "" }],
+Deno.test("resolveFlaggedClaims: resolves a contradicted tldr claim (claim 1 = tldr_ru)", () => {
+  const flagged = resolveFlaggedClaims(SAMPLE_SUMMARY, {
+    claims: [{ i: 1, verdict: "contradicted", evidence: "source says the opposite" }],
     notes: "",
   });
-  assertEquals(counts, { unsupported: 0, contradicted: 0 });
+  assertEquals(flagged, [
+    { text: "Краткое содержание.", verdict: "contradicted", evidence: "source says the opposite" },
+  ]);
+});
+
+Deno.test("resolveFlaggedClaims: resolves a body-paragraph claim (after tldr + all bullets)", () => {
+  // claim 1 = tldr, claims 2-3 = the 2 bullets, claim 4 = body_ru[0]
+  const flagged = resolveFlaggedClaims(SAMPLE_SUMMARY, {
+    claims: [{ i: 4, verdict: "unsupported", evidence: "" }],
+    notes: "",
+  });
+  assertEquals(flagged, [{ text: "Первый абзац.", verdict: "unsupported", evidence: "" }]);
+});
+
+Deno.test("resolveFlaggedClaims: ignores supported claims but keeps unsupported/contradicted ones, in judge order", () => {
+  const flagged = resolveFlaggedClaims(SAMPLE_SUMMARY, {
+    claims: [
+      { i: 1, verdict: "supported", evidence: "" },
+      { i: 3, verdict: "contradicted", evidence: "e1" },
+      { i: 2, verdict: "unsupported", evidence: "e2" },
+    ],
+    notes: "",
+  });
+  assertEquals(flagged, [
+    { text: "Пункт два.", verdict: "contradicted", evidence: "e1" },
+    { text: "Пункт один.", verdict: "unsupported", evidence: "e2" },
+  ]);
+});
+
+Deno.test("resolveFlaggedClaims: a claim index with no matching text (out of range) is dropped, not shown blank", () => {
+  const flagged = resolveFlaggedClaims(SAMPLE_SUMMARY, {
+    claims: [{ i: 99, verdict: "unsupported", evidence: "" }],
+    notes: "",
+  });
+  assertEquals(flagged, []);
 });
 
 // --- faithfulnessBadgeInfo (Task 34 Part B): the badge/tooltip only ever ---
