@@ -28,7 +28,7 @@ const OTHER_NOISE_TAG_PATTERN = /<(style|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi;
 const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/g;
 
 function stripHtmlCommentsCompletely(input: string): string {
-  let current = html;
+  let current = input;
   while (true) {
     const withoutComments = current.replace(HTML_COMMENT_PATTERN, "");
     const withoutNoiseScripts = withoutComments.replace(
@@ -36,27 +36,13 @@ function stripHtmlCommentsCompletely(input: string): string {
       (match, attrs) => JSON_LD_TYPE_PATTERN.test(attrs) ? match : "",
     );
     const next = withoutNoiseScripts.replace(OTHER_NOISE_TAG_PATTERN, "");
-function stripOtherNoiseTagsCompletely(input: string): string {
-  let current = input;
-  while (true) {
-    const next = current.replace(OTHER_NOISE_TAG_PATTERN, "");
-    if (next === current) return next;
-    current = next;
-  }
-}
-
     if (next === current) return next;
     current = next;
   }
 }
 
 function stripNoise(html: string): string {
-  return stripOtherNoiseTagsCompletely(withoutNoiseScripts);
-  const withoutNoiseScripts = withoutComments.replace(
-    SCRIPT_TAG_PATTERN,
-    (match, attrs) => JSON_LD_TYPE_PATTERN.test(attrs) ? match : "",
-  );
-  return withoutNoiseScripts.replace(OTHER_NOISE_TAG_PATTERN, "");
+  return stripHtmlCommentsCompletely(html);
 }
 
 // 1.5 MB — applied AFTER noise-stripping, so a legitimately large article
