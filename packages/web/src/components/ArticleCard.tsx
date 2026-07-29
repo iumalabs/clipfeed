@@ -4,7 +4,7 @@ import type { Dictionary, Lang } from "../i18n/i18n.ts";
 import { viaLabel } from "../i18n/i18n.ts";
 import { getAdminArticle, getArticle, translateArticle } from "../lib/api/api.ts";
 import { selectSummaryFields } from "../lib/content/summaryFields.ts";
-import { formatDate, hostnameFromUrl } from "../lib/format/format.ts";
+import { formatDate, hostnameFromUrl, resolveCardDateIso } from "../lib/format/format.ts";
 import { nextPollDelayMs, type PollState } from "../lib/feed/pollSchedule.ts";
 import { translateQueue } from "../lib/content/translateQueue.ts";
 import {
@@ -329,7 +329,9 @@ export function ArticleCard(props: ArticleCardProps) {
     );
     return (
       <article class="card card--skeleton" data-article-id={article.id}>
-        <div class="card-date">{formatDate(article.added_at, lang)}</div>
+        <div class="card-date">
+          {formatDate(resolveCardDateIso(article.published_at, article.added_at), lang)}
+        </div>
         <div class={shimmerClass} aria-hidden="true">
           <div class="skeleton-line skeleton-line--title" />
           <div class="skeleton-line skeleton-line--body" />
@@ -384,7 +386,9 @@ export function ArticleCard(props: ArticleCardProps) {
       : visitorFailureText(article.fail_class, dict);
     return (
       <article class="card card--failed" data-article-id={article.id}>
-        <div class="card-date">{formatDate(article.added_at, lang)}</div>
+        <div class="card-date">
+          {formatDate(resolveCardDateIso(article.published_at, article.added_at), lang)}
+        </div>
         <h3 class="card-title">{article.title}</h3>
         <p class="error-text">{message}</p>
         {isOwner && (
@@ -421,7 +425,9 @@ export function ArticleCard(props: ArticleCardProps) {
     );
     return (
       <article class="card card--skeleton" data-article-id={article.id}>
-        <div class="card-date">{formatDate(article.added_at, lang)}</div>
+        <div class="card-date">
+          {formatDate(resolveCardDateIso(article.published_at, article.added_at), lang)}
+        </div>
         <div class={shimmerClass} aria-hidden="true">
           <div class="skeleton-line skeleton-line--title" />
           <div class="skeleton-line skeleton-line--body" />
@@ -476,7 +482,9 @@ export function ArticleCard(props: ArticleCardProps) {
           )}
         </div>
       )}
-      <div class="card-date">{formatDate(article.added_at, lang)}</div>
+      <div class="card-date">
+        {formatDate(resolveCardDateIso(article.published_at, article.added_at), lang)}
+      </div>
 
       <div class={!expanded && hasImage ? "card-collapsed-row" : undefined}>
         <div class={!expanded && hasImage ? "card-collapsed-text" : undefined}>

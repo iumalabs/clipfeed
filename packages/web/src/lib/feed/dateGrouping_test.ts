@@ -53,3 +53,37 @@ Deno.test("groupArticlesBySection - empty input yields empty buckets", () => {
   assertEquals(grouped.yesterday, []);
   assertEquals(grouped.earlier, []);
 });
+
+// --- Task 61: sections bucket by added_at ONLY — a divergent published_at
+// (present on the real article shape, ignored here) must never move an
+// article to a different section. This is the owner's actual bug report:
+// an old article added today used to render under "Earlier" because
+// bucketing read published_at instead. ---
+
+Deno.test("groupArticlesBySection - published_at is ignored: an article published 3 days ago but added today is 'today'", () => {
+  const items = [
+    {
+      id: "a",
+      added_at: new Date(2026, 6, 21, 9, 0).toISOString(), // today
+      published_at: new Date(2026, 6, 18, 9, 0).toISOString(), // 3 days ago
+    },
+  ];
+  const grouped = groupArticlesBySection(items, NOW);
+  assertEquals(grouped.today.map((a) => a.id), ["a"]);
+  assertEquals(grouped.yesterday, []);
+  assertEquals(grouped.earlier, []);
+});
+
+Deno.test("groupArticlesBySection - published_at is ignored: an article published today but added yesterday is 'yesterday'", () => {
+  const items = [
+    {
+      id: "b",
+      added_at: new Date(2026, 6, 20, 22, 0).toISOString(), // yesterday
+      published_at: new Date(2026, 6, 21, 9, 0).toISOString(), // today
+    },
+  ];
+  const grouped = groupArticlesBySection(items, NOW);
+  assertEquals(grouped.yesterday.map((a) => a.id), ["b"]);
+  assertEquals(grouped.today, []);
+  assertEquals(grouped.earlier, []);
+});
