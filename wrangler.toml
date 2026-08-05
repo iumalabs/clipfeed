@@ -67,7 +67,7 @@ PUBLISH_MAX_PER_DAY = "10"
 # How many candidates the agent saves per run. String, parsed defensively
 # (1-20, else this default with a warning) — see README "Daily scraping
 # agent".
-AGENT_DAILY_PICKS = "10"
+AGENT_DAILY_PICKS = "20"
 # How much summary you want to read: the target TOTAL body length in
 # characters (all paragraphs, per language). Prompt and validation both
 # derive their numbers from this one setting (see summarize.ts's

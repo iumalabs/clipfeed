@@ -5,6 +5,7 @@ import { app } from "../index.ts";
 import type { AppEnv } from "./access-middleware.ts";
 import { turnstileGuard } from "./turnstile-middleware.ts";
 import { FakeD1 } from "../testing/fake_d1.ts";
+import { DEFAULT_AGENT_DAILY_PICKS } from "../agent/ranking.ts";
 
 const TEAM_DOMAIN = "test-team.cloudflareaccess.com";
 const AUD = "test-aud-tag";
@@ -244,7 +245,7 @@ Deno.test("GET /api/config: agent_daily_picks falls back to the default for an i
   const env = makeEnv({ AGENT_DAILY_PICKS: "not-a-number" });
   const res = await app.request("/api/config", {}, env, makeExecutionContext());
   const body = await res.json();
-  assertEquals(body.agent_daily_picks, 10);
+  assertEquals(body.agent_daily_picks, DEFAULT_AGENT_DAILY_PICKS);
 });
 
 // --- repo_url (Task 30 Part D): single source of truth for the header's

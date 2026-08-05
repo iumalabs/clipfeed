@@ -3,13 +3,16 @@ import type {
   AddedVia,
   Article,
   ArticleCounts,
+  ArticleFacets,
   ArticleListItem,
   ArticleStatus,
   FailureClass,
   FaithfulnessJson,
   FaithfulnessVerdict,
   PublicArticle,
+  SourceFacetCount,
   SummaryJson,
+  TagFacetCount,
 } from "@clipfeed/shared/types";
 import { classifyFailure } from "../../../shared/src/classify-failure.ts";
 import { normalizeTags } from "../lib/tags.ts";
@@ -1269,6 +1272,101 @@ export async function getArticleCounts(
   const yesterday = row?.yesterday ?? 0;
   const earlier = row?.earlier ?? 0;
   return { today, yesterday, earlier, total: today + yesterday + earlier };
+}
+
+// GET /api/articles/facets / /api/admin/articles/facets — true per-tag and
+// per-source counts across every matching row. Bug this replaces: the SPA
+// used to compute these client-side by counting `article.tags`/`.source`
+// over whatever articles happened to already be loaded in memory — which,
+// unfiltered, is only Today+Yesterday's worth (the initial-load effect stops
+// once those two sections are covered, see App.tsx), so the sidebar showed
+// what looked like "today's tag counts" rather than an all-time total. Same
+// shape as ArticleCountsParams minus the day boundaries (facets aren't
+// bucketed by date).
+export interface ArticleFacetsParams {
+  tag?: string;
+  source?: string;
+  q?: string;
+  archived?: boolean;
+  status?: ArticleStatus;
+}
+
+// Pure query builders — same reasoning as buildCountsQuery: unit-testable
+// without a real D1 binding. Tag facet counts deliberately drop the ACTIVE
+// tag filter from their own WHERE clause (while still respecting
+// source/q/archived/status) — otherwise, once a tag is selected, every OTHER
+// tag would show 0 (nothing else matches "tags LIKE %"<selected>"%"), making
+// it impossible to see what you'd get by switching tags. Source facets are
+// the mirror image, dropping only the active source filter. Selects the
+// minimal column (`tags` or `source`) rather than full rows — this app's
+// article count is small enough (personal feed, not a public multi-tenant
+// index) that counting in application code is simpler and more robust than
+// relying on SQLite's JSON1 extension (untested elsewhere in this codebase)
+// for a `GROUP BY json_each(tags)`.
+export function buildTagFacetQuery(params: ArticleFacetsParams): ListQuery {
+  const { conditions, binds } = buildFilterConditions({ ...params, tag: undefined });
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const sql = ["SELECT tags FROM articles", where].filter(Boolean).join(" ");
+  return { sql, binds };
+}
+
+export function buildSourceFacetQuery(params: ArticleFacetsParams): ListQuery {
+  const { conditions, binds } = buildFilterConditions({ ...params, source: undefined });
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const sql = ["SELECT source FROM articles", where].filter(Boolean).join(" ");
+  return { sql, binds };
+}
+
+// Pure aggregation — same sort (count desc, then label asc) the SPA's old
+// client-side computeTagFacets/computeSourceFacets already used, so the
+// visible ordering is unchanged; only the numbers become globally correct.
+export function countTagOccurrences(rows: readonly { tags: string | null }[]): TagFacetCount[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    let tags: unknown;
+    try {
+      tags = row.tags ? JSON.parse(row.tags) : [];
+    } catch {
+      tags = [];
+    }
+    if (!Array.isArray(tags)) continue;
+    for (const tag of tags) {
+      if (typeof tag !== "string") continue;
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}
+
+export function countSourceOccurrences(
+  rows: readonly { source: string | null }[],
+): SourceFacetCount[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.source) continue;
+    counts.set(row.source, (counts.get(row.source) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([source, count]) => ({ source, count }))
+    .sort((a, b) => b.count - a.count || a.source.localeCompare(b.source));
+}
+
+export async function getArticleFacets(
+  db: D1Database,
+  params: ArticleFacetsParams,
+): Promise<ArticleFacets> {
+  const tagQuery = buildTagFacetQuery(params);
+  const sourceQuery = buildSourceFacetQuery(params);
+  const [tagRows, sourceRows] = await Promise.all([
+    db.prepare(tagQuery.sql).bind(...tagQuery.binds).all<{ tags: string | null }>(),
+    db.prepare(sourceQuery.sql).bind(...sourceQuery.binds).all<{ source: string | null }>(),
+  ]);
+  return {
+    tags: countTagOccurrences(tagRows.results ?? []),
+    sources: countSourceOccurrences(sourceRows.results ?? []),
+  };
 }
 
 export interface PatchArticleInput {

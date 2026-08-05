@@ -1035,15 +1035,15 @@ extract → summarize → persist pipeline as every other capture path (includin
 ## Daily scraping agent
 
 Once a day, the agent reads a small set of trusted sources, ranks the last 24h of candidates against
-your interests with one cheap LLM call, and runs the top `AGENT_DAILY_PICKS` (default `10`) through
+your interests with one cheap LLM call, and runs the top `AGENT_DAILY_PICKS` (default `20`) through
 the normal extract → summarize → persist pipeline — same as any other capture path, just
 self-initiated (`added_via: "agent"`). The SPA already highlights the newest agent-added article
 from today with a "pick of the day" badge; no separate review step exists — a pick that turns out
 uninteresting is just another card you can archive.
 
-**`AGENT_DAILY_PICKS`** ([vars] in `wrangler.toml`, default `10`, valid range `1`–`20`) is how many
+**`AGENT_DAILY_PICKS`** ([vars] in `wrangler.toml`, default `20`, valid range `1`–`20`) is how many
 candidates the agent saves per run — a bad override (missing, non-numeric, out of range) falls back
-to `10` with a logged warning, same defensive-parse pattern as `SUMMARY_BODY_TARGET_CHARS`. Raising
+to `20` with a logged warning, same defensive-parse pattern as `SUMMARY_BODY_TARGET_CHARS`. Raising
 it increases how many summarization slots the agent itself spends every day — see "Self-healing
 failures" below for the `DAILY_SUMMARY_LIMIT` budget arithmetic this feeds into.
 
@@ -1246,7 +1246,7 @@ none of this costs an extra LLM call.
   ranking entirely — validated at load (`validateTopicQuotas` in `curation.ts`): an over-budget sum
   logs a `curation_quota_sum_exceeded` warning and truncates by dropping the **last-listed** quotas
   until it fits (so `{linux:1, hardware:1, security:1}` — sum 3 — comfortably fits within 50% of the
-  default `AGENT_DAILY_PICKS` of 10). A quota topic with fewer matching candidates than requested
+  default `AGENT_DAILY_PICKS` of 20). A quota topic with fewer matching candidates than requested
   just takes what exists and logs `rank_quota_unfilled {topic, wanted, got}` — it never blocks the
   run or forces in an off-topic pick.
 - **`prioritySources`** — source ids (from `sources.json`) that each get **at most one** guaranteed
@@ -1456,6 +1456,10 @@ instead — `80 - 10 = 70` slots/day for everything else, more than the old 45, 
 own contribution is self-limiting regardless of the default (see above: capped at 2/1 attempts per
 article and 5 retries per hourly tick, so it only spends slots proportional to an actual failure
 backlog, not a fixed daily tax).
+
+**Follow-up: `AGENT_DAILY_PICKS` raised again, 10 → 20** — `DAILY_SUMMARY_LIMIT` did not need to
+move this time: `80 - 20 = 60` slots/day headroom for everything else is still more generous than
+the pre-80 baseline of 45, so 80 stays the default.
 
 **Cost at 80/day:** in gateway/direct mode (a real Claude model, e.g. the default
 `claude-haiku-4-5-20251001`), even the theoretical worst case — every one of the 80 slots needing

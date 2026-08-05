@@ -636,6 +636,28 @@ export class FakeD1 implements D1Database {
       return [{ today, yesterday, earlier }];
     }
 
+    // buildTagFacetQuery / buildSourceFacetQuery (GET /api/articles/facets) —
+    // plain "SELECT tags FROM articles [WHERE ...]" / "SELECT source FROM
+    // articles [WHERE ...]", filter binds starting at index 0 (no boundary
+    // values baked in first, unlike the counts query above).
+    if (sql.startsWith("SELECT tags FROM articles")) {
+      let candidates = [...this.rows];
+      const whereMatch = sql.match(/FROM articles WHERE (.+)$/);
+      if (whereMatch) {
+        candidates = applyWhereConditions(candidates, whereMatch[1], values, 0);
+      }
+      return candidates.map((r) => ({ tags: r.tags }));
+    }
+
+    if (sql.startsWith("SELECT source FROM articles")) {
+      let candidates = [...this.rows];
+      const whereMatch = sql.match(/FROM articles WHERE (.+)$/);
+      if (whereMatch) {
+        candidates = applyWhereConditions(candidates, whereMatch[1], values, 0);
+      }
+      return candidates.map((r) => ({ source: r.source }));
+    }
+
     throw new Error(`FakeD1: unsupported query: ${sql}`);
   }
 

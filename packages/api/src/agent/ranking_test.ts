@@ -99,9 +99,9 @@ Deno.test("fallbackPicks: backfills from remaining candidates when fewer than pi
   assertEquals(picks, ["a1", "a2", "a3"]);
 });
 
-Deno.test("fallbackPicks: defaults to DEFAULT_AGENT_DAILY_PICKS (10) when pickCount is omitted", () => {
+Deno.test("fallbackPicks: defaults to DEFAULT_AGENT_DAILY_PICKS (20) when pickCount is omitted", () => {
   const candidates = Array.from(
-    { length: 12 },
+    { length: 25 },
     (_, i) => makeCandidate({ id: `s${i}-1`, sourceId: `s${i}` }),
   );
   const picks = fallbackPicks(candidates);
@@ -638,7 +638,7 @@ Deno.test("rankCandidates: the ranked-list cap never exceeds 24 even at the maxi
   }
 });
 
-Deno.test("rankCandidates: a missing/invalid AGENT_DAILY_PICKS falls back to 10 in the rendered prompt", async () => {
+Deno.test("rankCandidates: a missing/invalid AGENT_DAILY_PICKS falls back to DEFAULT_AGENT_DAILY_PICKS (20) in the rendered prompt", async () => {
   const originalFetch = globalThis.fetch;
   let capturedSystem = "";
   globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) => {

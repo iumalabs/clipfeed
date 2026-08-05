@@ -343,6 +343,105 @@ Deno.test("GET /api/articles/counts: counts respect the tag filter, same as GET 
   assertEquals(filtered.total, 1);
 });
 
+// --- GET /api/articles/facets + GET /api/admin/articles/facets — true
+// all-time per-tag/per-source counts across every matching row, not just
+// whatever page of articles the SPA happens to have loaded. See db.ts's
+// getArticleFacets for the bug this replaces. ---
+
+Deno.test("GET /api/articles/facets: 200 with no query params — no day boundaries required, unlike counts", async () => {
+  const env = makeEnv();
+  const ctx = makeExecutionContext().ctx;
+  const res = await app.request("/api/articles/facets", {}, env, ctx);
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { tags: [], sources: [] });
+});
+
+Deno.test("GET /api/articles/facets: visitor sees only 'ready' rows; GET /api/admin/articles/facets (owner, default status) sees every status", async () => {
+  const { env, authHeaders } = await makeOwnerContext();
+  const ctx = makeExecutionContext().ctx;
+
+  await insertPendingArticle(env.DB, {
+    id: "facet-ready",
+    url: "https://example.com/facet-ready",
+    title: "facet-ready",
+    source: "a.example",
+    tags: ["ai"],
+    added_via: "manual",
+    added_at: "2026-01-03T10:00:00.000Z",
+  });
+  const db = env.DB as unknown as FakeD1;
+  db.rows.find((r) => r.id === "facet-ready")!.status = "ready";
+
+  await insertPendingArticle(env.DB, {
+    id: "facet-pending",
+    url: "https://example.com/facet-pending",
+    title: "facet-pending",
+    source: "b.example",
+    tags: ["ai"],
+    added_via: "manual",
+    added_at: "2026-01-03T11:00:00.000Z",
+  });
+
+  const visitorRes = await app.request("/api/articles/facets", {}, env, ctx);
+  assertEquals(visitorRes.status, 200);
+  assertEquals(await visitorRes.json(), {
+    tags: [{ tag: "ai", count: 1 }],
+    sources: [{ source: "a.example", count: 1 }],
+  });
+
+  const ownerRes = await app.request(
+    "/api/admin/articles/facets",
+    { headers: authHeaders },
+    env,
+    ctx,
+  );
+  assertEquals(ownerRes.status, 200);
+  assertEquals(await ownerRes.json(), {
+    tags: [{ tag: "ai", count: 2 }],
+    sources: [{ source: "a.example", count: 1 }, { source: "b.example", count: 1 }],
+  });
+});
+
+Deno.test("GET /api/admin/articles/facets: 401 without auth", async () => {
+  const { env } = await makeOwnerContext();
+  const ctx = makeExecutionContext().ctx;
+  const res = await app.request("/api/admin/articles/facets", {}, env, ctx);
+  assertEquals(res.status, 401);
+});
+
+Deno.test("GET /api/articles/facets: tag facets ignore the active tag filter (source/q/archived still apply), same reasoning as buildTagFacetQuery in db_test.ts", async () => {
+  const { env } = await makeOwnerContext();
+  const ctx = makeExecutionContext().ctx;
+  const db = env.DB as unknown as FakeD1;
+
+  await insertPendingArticle(env.DB, {
+    id: "facet-tag-a",
+    url: "https://example.com/facet-tag-a",
+    title: "facet-tag-a",
+    source: "example.com",
+    tags: ["news"],
+    added_via: "manual",
+    added_at: "2026-01-03T10:00:00.000Z",
+  });
+  db.rows.find((r) => r.id === "facet-tag-a")!.status = "ready";
+
+  await insertPendingArticle(env.DB, {
+    id: "facet-tag-b",
+    url: "https://example.com/facet-tag-b",
+    title: "facet-tag-b",
+    source: "example.com",
+    tags: ["tech"],
+    added_via: "manual",
+    added_at: "2026-01-03T11:00:00.000Z",
+  });
+  db.rows.find((r) => r.id === "facet-tag-b")!.status = "ready";
+
+  const filtered = await (
+    await app.request("/api/articles/facets?tag=news", {}, env, ctx)
+  ).json();
+  assertEquals(filtered.tags, [{ tag: "news", count: 1 }, { tag: "tech", count: 1 }]);
+});
+
 // --- GET /api/admin/articles vs GET /api/articles: owner sees the real
 // error, a visitor never does (see articles_test.ts's dedicated privacy
 // regression test for the incident this fixes) ---

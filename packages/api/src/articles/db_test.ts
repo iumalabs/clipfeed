@@ -3,11 +3,16 @@ import {
   backfillNormalizedTags,
   buildCountsQuery,
   buildListQuery,
+  buildSourceFacetQuery,
+  buildTagFacetQuery,
+  countSourceOccurrences,
+  countTagOccurrences,
   countUnembeddedArticles,
   escapeLikeTerm,
   findRecentTitles,
   findRecentTitlesForDedup,
   getArticleCounts,
+  getArticleFacets,
   getArticlesByIds,
   getFaithfulnessStats,
   insertPendingArticle,
@@ -321,6 +326,136 @@ Deno.test("getArticleCounts: status omitted counts every status (owner's 'all' v
 
   const visitorReady = await getArticleCounts(db, { ...BOUNDARIES, status: "ready" });
   assertEquals(visitorReady, { today: 1, yesterday: 0, earlier: 0, total: 1 });
+});
+
+// --- Tag/source facet counts — GET /api/articles/facets. Replaces the SPA's
+// old client-side computeTagFacets/computeSourceFacets, which counted over
+// whatever articles happened to already be loaded (Today+Yesterday only by
+// default), silently producing "today's tag counts" instead of an all-time
+// total. See db.ts's getArticleFacets comment for the full incident. ---
+
+Deno.test("buildTagFacetQuery: no filters — selects tags only, no WHERE", () => {
+  const { sql, binds } = buildTagFacetQuery({});
+  assertEquals(sql, "SELECT tags FROM articles");
+  assertEquals(binds, []);
+});
+
+Deno.test("buildTagFacetQuery: drops the active tag filter but keeps source/q/archived/status", () => {
+  const { sql, binds } = buildTagFacetQuery({
+    tag: "ai",
+    source: "example.com",
+    q: "widget",
+    archived: true,
+    status: "ready",
+  });
+  assertEquals(sql.includes("tags LIKE"), false);
+  assertEquals(
+    sql,
+    "SELECT tags FROM articles WHERE source = ? AND " +
+      "(title LIKE ? ESCAPE '\\' OR summary_ru LIKE ? ESCAPE '\\' OR summary_en LIKE ? ESCAPE '\\') " +
+      "AND archived = ? AND status = ?",
+  );
+  assertEquals(binds, ["example.com", "%widget%", "%widget%", "%widget%", 1, "ready"]);
+});
+
+Deno.test("buildSourceFacetQuery: drops the active source filter but keeps tag/q/archived/status", () => {
+  const { sql, binds } = buildSourceFacetQuery({
+    tag: "ai",
+    source: "example.com",
+    status: "ready",
+  });
+  assertEquals(sql.includes("source ="), false);
+  assertEquals(sql, "SELECT source FROM articles WHERE tags LIKE ? AND status = ?");
+  assertEquals(binds, ['%"ai"%', "ready"]);
+});
+
+Deno.test("countTagOccurrences: counts each tag across rows, sorted count desc then tag asc", () => {
+  const counts = countTagOccurrences([
+    { tags: '["ai", "news"]' },
+    { tags: '["ai"]' },
+    { tags: '["news"]' },
+    { tags: '["zzz"]' },
+  ]);
+  assertEquals(counts, [
+    { tag: "ai", count: 2 },
+    { tag: "news", count: 2 },
+    { tag: "zzz", count: 1 },
+  ]);
+});
+
+Deno.test("countTagOccurrences: tolerates null/malformed/non-array tags without throwing", () => {
+  const counts = countTagOccurrences([
+    { tags: null },
+    { tags: "not json" },
+    { tags: '"just a string"' },
+    { tags: '["ok"]' },
+  ]);
+  assertEquals(counts, [{ tag: "ok", count: 1 }]);
+});
+
+Deno.test("countSourceOccurrences: counts each source across rows, sorted count desc then source asc", () => {
+  const counts = countSourceOccurrences([
+    { source: "b.example" },
+    { source: "a.example" },
+    { source: "a.example" },
+    { source: null },
+  ]);
+  assertEquals(counts, [
+    { source: "a.example", count: 2 },
+    { source: "b.example", count: 1 },
+  ]);
+});
+
+Deno.test("getArticleFacets: computes true all-time counts, not just currently-loaded-page counts", async () => {
+  const db = new FakeD1();
+  db.rows.push(
+    rowAt("a1", "2026-01-03T10:00:00.000Z", { tags: '["ai"]', source: "a.example" }),
+    rowAt("a2", "2026-01-02T10:00:00.000Z", { tags: '["ai"]', source: "a.example" }),
+    rowAt("a3", "2025-12-01T10:00:00.000Z", { tags: '["ai", "news"]', source: "b.example" }),
+  );
+
+  const facets = await getArticleFacets(db, {});
+  assertEquals(facets, {
+    tags: [{ tag: "ai", count: 3 }, { tag: "news", count: 1 }],
+    sources: [{ source: "a.example", count: 2 }, { source: "b.example", count: 1 }],
+  });
+});
+
+Deno.test("getArticleFacets: tag facets ignore the active tag filter (switching tags stays meaningful); source facets are the mirror image", async () => {
+  const db = new FakeD1();
+  db.rows.push(
+    rowAt("a1", "2026-01-03T10:00:00.000Z", { tags: '["ai"]', source: "a.example" }),
+    rowAt("a2", "2026-01-02T10:00:00.000Z", { tags: '["news"]', source: "b.example" }),
+  );
+
+  const withTagFilter = await getArticleFacets(db, { tag: "ai" });
+  assertEquals(withTagFilter.tags, [{ tag: "ai", count: 1 }, { tag: "news", count: 1 }]);
+
+  const withSourceFilter = await getArticleFacets(db, { source: "a.example" });
+  assertEquals(withSourceFilter.sources, [
+    { source: "a.example", count: 1 },
+    { source: "b.example", count: 1 },
+  ]);
+});
+
+Deno.test("getArticleFacets: respects status filter (visitor sees only ready; owner can see all)", async () => {
+  const db = new FakeD1();
+  db.rows.push(
+    rowAt("ready1", "2026-01-03T10:00:00.000Z", { tags: '["ai"]', status: "ready" }),
+    rowAt("pending1", "2026-01-03T10:00:00.000Z", { tags: '["ai"]', status: "pending" }),
+  );
+
+  const visitor = await getArticleFacets(db, { status: "ready" });
+  assertEquals(visitor.tags, [{ tag: "ai", count: 1 }]);
+
+  const owner = await getArticleFacets(db, {});
+  assertEquals(owner.tags, [{ tag: "ai", count: 2 }]);
+});
+
+Deno.test("getArticleFacets: an empty table returns empty tag/source lists, not an error", async () => {
+  const db = new FakeD1();
+  const facets = await getArticleFacets(db, {});
+  assertEquals(facets, { tags: [], sources: [] });
 });
 
 // --- Task 32: multi-word search — AND-of-terms semantics, byte-safe

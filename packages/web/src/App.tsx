@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "preact/hooks";
-import type { AddedVia, ArticleCounts, ArticleListItem } from "@clipfeed/shared/types";
+import type {
+  AddedVia,
+  ArticleCounts,
+  ArticleFacets,
+  ArticleListItem,
+} from "@clipfeed/shared/types";
 import { dictionaries, type Lang, readStoredLang, writeStoredLang } from "./i18n/i18n.ts";
 import { useTheme } from "./lib/ui/theme.ts";
 import {
@@ -9,9 +14,11 @@ import {
   deleteArticle,
   getAdminArticle,
   getAdminArticleCounts,
+  getAdminArticleFacets,
   getAdminMe,
   getArticle,
   getArticleCounts,
+  getArticleFacets,
   listAdminArticles,
   listArticles,
   patchArticle,
@@ -21,6 +28,7 @@ import {
   searchArticles,
 } from "./lib/api/api.ts";
 import { computeDayBoundaries } from "./lib/feed/dayBoundaries.ts";
+import { computeSourceFacets, computeTagFacets } from "./lib/feed/facets.ts";
 import {
   readStoredSearchMode,
   type SearchMode,
@@ -78,18 +86,6 @@ const PAGE_LIMIT = 20;
 // into an unbounded fetch loop.
 const MAX_INITIAL_PAGES = 25;
 
-function computeTagFacets(articles: ArticleListItem[]) {
-  const counts = new Map<string, number>();
-  for (const article of articles) {
-    for (const tag of article.tags) {
-      counts.set(tag, (counts.get(tag) ?? 0) + 1);
-    }
-  }
-  return [...counts.entries()]
-    .map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
-}
-
 // Owner mode fetches the full row (real `error`/`faithfulness_json`/
 // `faithfulness_verdict` included) from /api/admin/articles; visitor mode
 // fetches the redacted public shape from /api/articles and fills in
@@ -131,6 +127,18 @@ function fetchArticleCounts(
   return isOwner ? getAdminArticleCounts(boundaries, params) : getArticleCounts(boundaries, params);
 }
 
+// True per-tag/per-source counts across every matching row — same
+// owner/visitor split as fetchArticleCounts above (a visitor only ever sees
+// status='ready'). Replaces the old client-side computeTagFacets/
+// computeSourceFacets (still kept in lib/feed/facets.ts, but only as the
+// semantic-search-mode fallback — see the facets fetch effect below).
+function fetchArticleFacets(
+  isOwner: boolean,
+  params: ArticleCountsParams,
+): Promise<ArticleFacets> {
+  return isOwner ? getAdminArticleFacets(params) : getArticleFacets(params);
+}
+
 // Semantic search's counterpart to fetchArticleList above — same
 // owner/visitor redaction split, but no pagination (GET /api/search is a
 // single bounded top-K list, already ranked by similarity — see search.ts
@@ -167,17 +175,6 @@ async function fetchArticleById(isOwner: boolean, id: string): Promise<ArticleLi
     faithfulness_json: null,
     faithfulness_enforced_at: null,
   };
-}
-
-function computeSourceFacets(articles: ArticleListItem[]) {
-  const counts = new Map<string, number>();
-  for (const article of articles) {
-    if (!article.source) continue;
-    counts.set(article.source, (counts.get(article.source) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([source, count]) => ({ source, count }))
-    .sort((a, b) => b.count - a.count || a.source.localeCompare(b.source));
 }
 
 export function App() {
@@ -218,6 +215,13 @@ export function App() {
   // computing from `articles` itself (the old, loaded-length-only
   // behavior). Never blocks rendering: the fetch below is fire-and-forget.
   const [articleCounts, setArticleCounts] = useState<ArticleCounts | null>(null);
+  // True all-time per-tag/per-source counts, honoring the same active
+  // filters as `articles` (minus the facet's own dimension — see
+  // getArticleFacets on the API side). null means "not available yet, or
+  // the endpoint failed, or we're in semantic-search mode" — the
+  // tagFacets/sourceFacets useMemo below falls back to computing over
+  // `articles` itself in that case (see lib/feed/facets.ts).
+  const [articleFacets, setArticleFacets] = useState<ArticleFacets | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -448,6 +452,39 @@ export function App() {
           JSON.stringify({ event: "article_counts_fetch_failed", message: String(err) }),
         );
         setArticleCounts(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [query, activeTag, activeSource, archivedView, isOwner, searchMode]);
+
+  // Server-computed tag/source facet counts — same fetch triggers as the
+  // counts effect above, same semantic-mode carve-out (a global SQL-filtered
+  // facet count is meaningless when the visible articles are Vectorize
+  // similarity results, not SQL-filtered rows; the tagFacets/sourceFacets
+  // useMemo below falls back to computing over `articles` locally in that
+  // case). Fixes the bug where the sidebar's tag counts were silently
+  // computed over only the currently-loaded articles (Today+Yesterday by
+  // default), which looked like "today's tag counts" instead of an all-time
+  // total.
+  useEffect(() => {
+    if (query.trim() !== "" && searchMode === "semantic") return;
+    let cancelled = false;
+    fetchArticleFacets(isOwner, {
+      tag: activeTag ?? undefined,
+      source: activeSource ?? undefined,
+      q: query || undefined,
+      archived: archivedView,
+    })
+      .then((facets) => {
+        if (!cancelled) setArticleFacets(facets);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn(
+          JSON.stringify({ event: "article_facets_fetch_failed", message: String(err) }),
+        );
+        setArticleFacets(null);
       });
     return () => {
       cancelled = true;
@@ -969,8 +1006,14 @@ export function App() {
     globalThis.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const tagFacets = useMemo(() => computeTagFacets(articles), [articles]);
-  const sourceFacets = useMemo(() => computeSourceFacets(articles), [articles]);
+  const tagFacets = useMemo(
+    () => articleFacets?.tags ?? computeTagFacets(articles),
+    [articleFacets, articles],
+  );
+  const sourceFacets = useMemo(
+    () => articleFacets?.sources ?? computeSourceFacets(articles),
+    [articleFacets, articles],
+  );
   const pickOfDayId = useMemo(() => {
     const pick = articles.find((a) => isPickOfTheDay(a, articles));
     return pick?.id ?? null;
