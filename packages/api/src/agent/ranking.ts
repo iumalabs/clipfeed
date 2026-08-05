@@ -8,7 +8,7 @@ import { loadCurationConfig } from "./curation.ts";
 import { domainMatchesAny } from "./domain-block.ts";
 import { hostname } from "../lib/url-host.ts";
 
-export const DEFAULT_AGENT_DAILY_PICKS = 10;
+export const DEFAULT_AGENT_DAILY_PICKS = 20;
 const MIN_AGENT_DAILY_PICKS = 1;
 const MAX_AGENT_DAILY_PICKS = 20;
 const RANK_MAX_TOKENS = 400;

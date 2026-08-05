@@ -336,6 +336,34 @@
           "total": { "type": "integer", "minimum": 0 }
         }
       },
+      "TagFacetCount": {
+        "type": "object",
+        "required": ["tag", "count"],
+        "properties": {
+          "tag": { "type": "string" },
+          "count": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "SourceFacetCount": {
+        "type": "object",
+        "required": ["source", "count"],
+        "properties": {
+          "source": { "type": "string" },
+          "count": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "ArticleFacets": {
+        "type": "object",
+        "required": ["tags", "sources"],
+        "description": "True per-tag and per-source counts across every matching row — not just whatever page of articles the SPA happens to have loaded. Replaces the SPA's old client-side computeTagFacets/computeSourceFacets, which counted only the currently-loaded (Today+Yesterday by default) articles and silently showed something closer to \"today's tag counts\" than an all-time total. Each list is sorted count desc, then label asc. Tag counts respect the active source/q/archived/status filters but deliberately exclude the active tag filter from their own query (so switching tags stays meaningful); source counts are the mirror image.",
+        "properties": {
+          "tags": { "type": "array", "items": { "$ref": "#/components/schemas/TagFacetCount" } },
+          "sources": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SourceFacetCount" }
+          }
+        }
+      },
       "CreateArticleRequest": {
         "type": "object",
         "required": ["url"],
@@ -936,6 +964,29 @@
         }
       }
     },
+    "/api/articles/facets": {
+      "get": {
+        "tags": ["public"],
+        "summary": "Per-tag and per-source article counts (public)",
+        "description": "True all-time counts across every matching row, always status='ready'. Same filters as GET /api/articles (tag/source/q/archived) minus limit/cursor — a facet count isn't paginated. Fixes a bug where the SPA computed these client-side over only its currently-loaded articles (Today+Yesterday by default), which looked like a per-day count instead of a true total. Tag counts ignore the active `tag` filter (source/q/archived still apply) so the sidebar can show what switching to another tag would yield; source counts are the mirror image, ignoring only `source`.",
+        "operationId": "getPublicArticleFacets",
+        "parameters": [
+          { "$ref": "#/components/parameters/ListTag" },
+          { "$ref": "#/components/parameters/ListSource" },
+          { "$ref": "#/components/parameters/ListQuery" },
+          { "$ref": "#/components/parameters/ListArchived" }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ArticleFacets" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
     "/api/articles/{id}": {
       "get": {
         "tags": ["public"],
@@ -1191,6 +1242,32 @@
             "description": "OK",
             "content": {
               "application/json": { "schema": { "$ref": "#/components/schemas/ArticleCounts" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/admin/articles/facets": {
+      "get": {
+        "tags": ["admin"],
+        "summary": "Per-tag and per-source article counts (owner)",
+        "description": "Owner-only equivalent of GET /api/articles/facets — honors status=ready|pending|failed|all like GET /api/admin/articles (default: every status), same reasoning as the admin counts route above.",
+        "operationId": "getAdminArticleFacets",
+        "security": [{ "cloudflareAccess": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/ListTag" },
+          { "$ref": "#/components/parameters/ListSource" },
+          { "$ref": "#/components/parameters/ListQuery" },
+          { "$ref": "#/components/parameters/ListArchived" },
+          { "$ref": "#/components/parameters/ListStatus" }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ArticleFacets" } }
             }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },

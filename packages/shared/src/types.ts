@@ -266,6 +266,32 @@ export interface ArticleCounts {
   total: number;
 }
 
+// GET /api/articles/facets / /api/admin/articles/facets — true per-tag and
+// per-source counts across every matching row (not just whatever page of
+// articles the SPA happens to have loaded — see db.ts's getArticleFacets for
+// why that distinction matters: the SPA only loads Today+Yesterday by
+// default, so counting client-side over the loaded set silently produced
+// "today's tag counts" instead of an all-time total). Each list is sorted
+// count desc, then label asc — same tie-break the SPA's old client-side
+// computeTagFacets/computeSourceFacets already used, so the visible ordering
+// doesn't change, only the numbers become correct. Tag counts respect the
+// active source/query/archived filters but NOT the active tag filter itself
+// (so switching tags stays meaningful); source counts are the mirror image.
+export interface TagFacetCount {
+  tag: string;
+  count: number;
+}
+
+export interface SourceFacetCount {
+  source: string;
+  count: number;
+}
+
+export interface ArticleFacets {
+  tags: TagFacetCount[];
+  sources: SourceFacetCount[];
+}
+
 export interface PatchArticleRequest {
   archived?: boolean;
   tags?: string[];

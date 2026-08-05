@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type {
   ArticleCounts,
+  ArticleFacets,
   DuplicateArticleResponse,
   EmbeddingsBackfillResponse,
   PublishedAtBackfillResponse,
@@ -22,6 +23,7 @@ import {
   findRecentTitlesForDedup,
   getArticleById,
   getArticleCounts,
+  getArticleFacets,
   getFailureStats,
   getFaithfulnessStats,
   getLastAgentActivity,
@@ -329,6 +331,25 @@ app.get("/api/articles/counts", async (c) => {
   return c.json(counts satisfies ArticleCounts);
 });
 
+// True per-tag/per-source counts across every matching row — the sidebar's
+// tag/source facet pills used to compute these client-side by counting over
+// whatever articles were already loaded in memory, which (unfiltered) is
+// only Today+Yesterday's worth, silently showing "today's tag counts"
+// instead of an all-time total. Same filter contract as GET
+// /api/articles/counts (tag/source/q/archived; status always forced
+// 'ready'), no day boundaries needed since facets aren't date-bucketed.
+app.get("/api/articles/facets", async (c) => {
+  const params = parseArticleListParams(c);
+  const facets = await getArticleFacets(c.env.DB, {
+    tag: params.tag,
+    source: params.source,
+    q: params.q,
+    archived: params.archived,
+    status: "ready",
+  });
+  return c.json(facets satisfies ArticleFacets);
+});
+
 // Public — excludes full_text and the raw error string (see
 // PublicArticle/toPublicArticle). The full row is only available to the
 // owner, via GET /api/admin/articles/:id below. Task 41 Part D: a
@@ -538,6 +559,21 @@ app.get("/api/admin/articles/counts", async (c) => {
     yesterdayStart: boundaries.value.yesterdayStart,
   });
   return c.json(counts satisfies ArticleCounts);
+});
+
+// Owner-only equivalent of GET /api/articles/facets — honors status=
+// ready|pending|failed|all like GET /api/admin/articles (default: every
+// status), same as the admin counts route above.
+app.get("/api/admin/articles/facets", async (c) => {
+  const params = parseArticleListParams(c);
+  const facets = await getArticleFacets(c.env.DB, {
+    tag: params.tag,
+    source: params.source,
+    q: params.q,
+    archived: params.archived,
+    status: params.status,
+  });
+  return c.json(facets satisfies ArticleFacets);
 });
 
 // Owner-only full row, including full_text and the raw error string.

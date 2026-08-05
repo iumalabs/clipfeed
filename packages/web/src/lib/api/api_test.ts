@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { buildArticlesUrl, buildCountsUrl, buildSearchUrl } from "./api.ts";
+import { buildArticlesUrl, buildCountsUrl, buildFacetsUrl, buildSearchUrl } from "./api.ts";
 
 const BOUNDARIES = {
   todayStart: "2026-01-03T00:00:00.000Z",
@@ -96,6 +96,33 @@ Deno.test("buildCountsUrl: archived false serializes as 0, omitted filters are s
     "/api/articles/counts?today_start=2026-01-03T00%3A00%3A00.000Z&" +
       "yesterday_start=2026-01-02T00%3A00%3A00.000Z&archived=0",
   );
+});
+
+// --- buildFacetsUrl — GET /api/articles/facets ---
+
+Deno.test("buildFacetsUrl: no filters yields the bare endpoint (no boundaries needed, unlike counts)", () => {
+  assertEquals(buildFacetsUrl(), "/api/articles/facets");
+});
+
+Deno.test("buildFacetsUrl: an explicit base swaps the endpoint (owner mode)", () => {
+  assertEquals(
+    buildFacetsUrl({}, "/api/admin/articles/facets"),
+    "/api/admin/articles/facets",
+  );
+});
+
+Deno.test("buildFacetsUrl: combines tag + source + q + archived", () => {
+  const url = buildFacetsUrl({
+    tag: "ai",
+    source: "example.com",
+    q: "widget",
+    archived: true,
+  });
+  assertEquals(url, "/api/articles/facets?tag=ai&source=example.com&q=widget&archived=1");
+});
+
+Deno.test("buildFacetsUrl: archived false serializes as 0, omitted filters are simply absent", () => {
+  assertEquals(buildFacetsUrl({ archived: false }), "/api/articles/facets?archived=0");
 });
 
 Deno.test("buildSearchUrl: defaults to /api/search", () => {

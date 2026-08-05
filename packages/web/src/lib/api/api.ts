@@ -3,6 +3,7 @@ import type {
   AdminSearchResponse,
   Article,
   ArticleCounts,
+  ArticleFacets,
   ArticleListItem,
   ArticleListResponse,
   CreateArticleRequest,
@@ -136,6 +137,37 @@ export function getAdminArticleCounts(
   params: ArticleCountsParams = {},
 ): Promise<ArticleCounts> {
   return request<ArticleCounts>(buildCountsUrl(boundaries, params, "/api/admin/articles/counts"));
+}
+
+// Same filter shape as ArticleCountsParams (facets aren't bucketed by date,
+// so no day boundaries here). Pure, unit-testable without a fetch mock —
+// same reasoning as buildCountsUrl above. `base` lets the owner-mode facets
+// reuse it against /api/admin/articles/facets (see getAdminArticleFacets
+// below).
+export function buildFacetsUrl(
+  params: ArticleCountsParams = {},
+  base = "/api/articles/facets",
+): string {
+  const search = new URLSearchParams();
+  if (params.tag) search.set("tag", params.tag);
+  if (params.source) search.set("source", params.source);
+  if (params.q) search.set("q", params.q);
+  if (params.archived !== undefined) search.set("archived", params.archived ? "1" : "0");
+  const qs = search.toString();
+  return qs ? `${base}?${qs}` : base;
+}
+
+// True per-tag/per-source counts across every matching row (not just the
+// SPA's currently-loaded articles — see db.ts's getArticleFacets for the bug
+// this replaces). Always status='ready' server-side, same as getArticleCounts.
+export function getArticleFacets(params: ArticleCountsParams = {}): Promise<ArticleFacets> {
+  return request<ArticleFacets>(buildFacetsUrl(params));
+}
+
+// Owner-only equivalent — sees every status, same as getAdminArticleCounts
+// vs. getArticleCounts.
+export function getAdminArticleFacets(params: ArticleCountsParams = {}): Promise<ArticleFacets> {
+  return request<ArticleFacets>(buildFacetsUrl(params, "/api/admin/articles/facets"));
 }
 
 // Pure, same reasoning as buildArticlesUrl above — unit-testable without a
