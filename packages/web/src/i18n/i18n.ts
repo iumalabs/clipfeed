@@ -48,6 +48,7 @@ export interface Dictionary {
   permanentReasonSsrfBlocked: string;
   permanentReasonPaywalled: string;
   permanentReasonUnfaithful: string;
+  permanentReasonNotNews: string;
   dailyLimitFailureLabel: string;
   faithfulnessBadgeWeak: string;
   faithfulnessBadgeFail: string;
@@ -184,6 +185,7 @@ const ru: Dictionary = {
   permanentReasonSsrfBlocked: "ссылка заблокирована политикой безопасности",
   permanentReasonPaywalled: "страница закрыта платным доступом",
   permanentReasonUnfaithful: "пересказ не подтверждён источником",
+  permanentReasonNotNews: "страница не похожа на новость (о компании, реклама и т.п.)",
   dailyLimitFailureLabel: "Дневной лимит выжимок исчерпан — обработается автоматически завтра",
   faithfulnessBadgeWeak: "требует проверки",
   faithfulnessBadgeFail: "возможны неточности",
@@ -322,6 +324,7 @@ const en: Dictionary = {
   permanentReasonSsrfBlocked: "the link was blocked by security policy",
   permanentReasonPaywalled: "the page is behind a paywall",
   permanentReasonUnfaithful: "the summary wasn't supported by the source",
+  permanentReasonNotNews: "the page doesn't look like news (about/ads/legal page)",
   dailyLimitFailureLabel: "Daily summary limit reached — this will process automatically tomorrow",
   faithfulnessBadgeWeak: "needs review",
   faithfulnessBadgeFail: "possibly inaccurate",

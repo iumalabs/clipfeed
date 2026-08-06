@@ -53,8 +53,9 @@ function autoblockKey(domain: string): string {
 }
 
 // Signal weight per a classified pipeline failure. Extraction 'insufficient
-// text' and fetch 402/403 (paywall) both contribute +1 — a domain that
-// keeps yielding either is a real, repeatable signal that scraping it is a
+// text', fetch 402/403 (paywall), and Task 64's 'not_news' (an About/legal/
+// ad-info page, not a real article) all contribute +1 — a domain that keeps
+// yielding any of these is a real, repeatable signal that scraping it is a
 // waste. Transient failures (5xx/timeouts, classifyFailure's 'transient'
 // class) contribute +0 deliberately: an outage or a slow response is
 // evidence the UPSTREAM had a bad moment, not that the domain is
@@ -64,7 +65,8 @@ function autoblockKey(domain: string): string {
 export function autoblockSignalWeight(classification: FailureClassification): number {
   if (classification.class !== "permanent") return 0;
   return classification.permanentReasonKey === "insufficient_text" ||
-      classification.permanentReasonKey === "paywalled"
+      classification.permanentReasonKey === "paywalled" ||
+      classification.permanentReasonKey === "not_news"
     ? 1
     : 0;
 }
