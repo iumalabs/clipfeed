@@ -54,6 +54,8 @@ interface ArticleRow {
   en_generated_at?: string | null;
   archived?: boolean;
   published_at?: string | null;
+  faithfulness_verdict?: string | null;
+  faithfulness_json?: Record<string, unknown> | null;
 }
 
 function summaryFor(title: string, tldr: string): Record<string, unknown> {
@@ -85,6 +87,8 @@ function insertStatement(row: ArticleRow): string {
     "fail_class",
     "en_generated_at",
     "published_at",
+    "faithfulness_verdict",
+    "faithfulness_json",
   ];
   const values = [
     sqlString(row.id),
@@ -102,6 +106,8 @@ function insertStatement(row: ArticleRow): string {
     row.fail_class ? sqlString(row.fail_class) : "NULL",
     row.en_generated_at ? sqlString(row.en_generated_at) : "NULL",
     row.published_at ? sqlString(row.published_at) : "NULL",
+    row.faithfulness_verdict ? sqlString(row.faithfulness_verdict) : "NULL",
+    row.faithfulness_json ? sqlJson(row.faithfulness_json) : "NULL",
   ];
   return `INSERT INTO articles (${columns.join(", ")}) VALUES (${values.join(", ")});`;
 }
@@ -428,6 +434,142 @@ function sectionGroupingRows(): ArticleRow[] {
   ];
 }
 
+// --- Group 8: tag/source facet counts (Task 62 regression) ---
+// The bug this replaces: the sidebar's tag/source pill counts used to be
+// computed CLIENT-SIDE over whatever articles happened to already be loaded
+// (Today+Yesterday by default), so an unfiltered view showed something
+// closer to "today's tag counts" than a true all-time total — see
+// GET /api/articles/facets in packages/api/src/articles/db.ts. 2 rows sit in
+// "today" (always loaded by the initial-load loop) and 5 sit well into
+// "earlier" (never loaded until that section is expanded) — a correct facet
+// count must show all 7 without the reader ever expanding "earlier".
+const FACETS_SOURCE = "e2e-facets.example.com";
+export const FACETS_TAG = "e2e-facets";
+export const FACETS_TOTAL_COUNT = 7;
+
+function facetsRows(): ArticleRow[] {
+  const rows: ArticleRow[] = [];
+  for (let i = 0; i < 2; i++) {
+    rows.push({
+      id: `e2e-facets-today-${i}`,
+      url: `https://${FACETS_SOURCE}/today/${i}`,
+      title: `Facets today #${i}`,
+      source: FACETS_SOURCE,
+      added_at: isoMinutesAgo(3 + i),
+      added_via: "manual",
+      status: "ready",
+      tags: [FACETS_TAG],
+      summary_json: summaryFor(`Facets today #${i}`, "Сегодняшняя статья для теста фасетов."),
+      summary_ru: "Сегодняшняя статья для теста фасетов.",
+    });
+  }
+  for (let i = 0; i < 5; i++) {
+    rows.push({
+      id: `e2e-facets-earlier-${i}`,
+      url: `https://${FACETS_SOURCE}/earlier/${i}`,
+      title: `Facets earlier #${i}`,
+      source: FACETS_SOURCE,
+      added_at: isoMinutesAgo(5000 + 10 * i),
+      added_via: "manual",
+      status: "ready",
+      tags: [FACETS_TAG],
+      summary_json: summaryFor(`Facets earlier #${i}`, "Более старая статья для теста фасетов."),
+      summary_ru: "Более старая статья для теста фасетов.",
+    });
+  }
+  return rows;
+}
+
+// --- Group 9: owner mutations — archive/unarchive + delete ---
+// Deliberately does NOT exercise retry/resummarize/create-new-article: those
+// enqueue a REAL pipeline run (fetch -> extract -> summarize) against
+// whatever URL is on the row, which for a fake "e2e-*.example.com" domain
+// means a real, slow, doomed-to-fail network call — exactly what this whole
+// harness is built to avoid (see scripts/e2e/run.ts's doc comment: zero
+// external network dependency, zero real cost). Archive and delete are pure
+// D1 mutations with no queue/pipeline involvement at all, so they're safe to
+// exercise against the real running worker.
+const OWNERACTIONS_SOURCE = "e2e-owneractions.example.com";
+export const OWNERACTIONS_TAG = "e2e-owneractions";
+export const OWNERACTIONS_ARCHIVE_ID = "e2e-owneractions-archive";
+export const OWNERACTIONS_DELETE_ID = "e2e-owneractions-delete";
+
+function ownerActionsRows(): ArticleRow[] {
+  return [
+    {
+      id: OWNERACTIONS_ARCHIVE_ID,
+      url: `https://${OWNERACTIONS_SOURCE}/archive`,
+      title: "Owner-actions archive target",
+      source: OWNERACTIONS_SOURCE,
+      added_at: isoMinutesAgo(5100),
+      added_via: "manual",
+      status: "ready",
+      tags: [OWNERACTIONS_TAG],
+      summary_json: summaryFor(
+        "Owner-actions archive target",
+        "Статья для теста архивации владельцем.",
+      ),
+      summary_ru: "Статья для теста архивации владельцем.",
+    },
+    {
+      id: OWNERACTIONS_DELETE_ID,
+      url: `https://${OWNERACTIONS_SOURCE}/delete`,
+      title: "Owner-actions delete target",
+      source: OWNERACTIONS_SOURCE,
+      added_at: isoMinutesAgo(5110),
+      added_via: "manual",
+      status: "ready",
+      tags: [OWNERACTIONS_TAG],
+      summary_json: summaryFor(
+        "Owner-actions delete target",
+        "Статья для теста удаления владельцем.",
+      ),
+      summary_ru: "Статья для теста удаления владельцем.",
+    },
+  ];
+}
+
+// --- Group 10: faithfulness actionable detail (Task 61 follow-up
+// regression) — an owner-only 'weak'/'fail' badge must resolve its flagged
+// claims back to the actual summary sentence, not just a bare count. Claim
+// indices follow buildFaithfulnessClaimTexts' fixed ordering (1=tldr,
+// 2..=bullets in order, then body paragraphs) — summaryFor() always
+// produces exactly 2 bullets_ru + 1 body_ru paragraph, so claim 2 here is
+// the fixture's first bullet, deliberately flagged 'unsupported'.
+const FAITHFULNESS_SOURCE = "e2e-faithfulness.example.com";
+export const FAITHFULNESS_TAG = "e2e-faithfulness";
+export const FAITHFULNESS_ARTICLE_ID = "e2e-faithfulness-weak";
+export const FAITHFULNESS_FLAGGED_BULLET = "Пункт первый.";
+
+function faithfulnessRows(): ArticleRow[] {
+  return [
+    {
+      id: FAITHFULNESS_ARTICLE_ID,
+      url: `https://${FAITHFULNESS_SOURCE}/weak`,
+      title: "Faithfulness weak-verdict article",
+      source: FAITHFULNESS_SOURCE,
+      added_at: isoMinutesAgo(5200),
+      added_via: "manual",
+      status: "ready",
+      tags: [FAITHFULNESS_TAG],
+      summary_json: summaryFor(
+        "Faithfulness weak-verdict article",
+        "Статья для теста достоверности.",
+      ),
+      summary_ru: "Статья для теста достоверности.",
+      faithfulness_verdict: "weak",
+      faithfulness_json: {
+        claims: [
+          { i: 1, verdict: "supported", evidence: "" },
+          { i: 2, verdict: "unsupported", evidence: "Источник этого не подтверждает." },
+          { i: 3, verdict: "supported", evidence: "" },
+          { i: 4, verdict: "supported", evidence: "" },
+        ],
+      },
+    },
+  ];
+}
+
 export function buildSeedSql(): string {
   const rows = [
     ...paginationRows(),
@@ -437,6 +579,9 @@ export function buildSeedSql(): string {
     ...deepLinkRows(),
     ...duplicateAddRows(),
     ...sectionGroupingRows(),
+    ...facetsRows(),
+    ...ownerActionsRows(),
+    ...faithfulnessRows(),
   ];
   return [
     "DELETE FROM articles;",

@@ -41,8 +41,10 @@ test("today+yesterday fully load, Earlier's count is the true total from the sta
   // Task 61: 19 pagination "today" rows + 1 pending poll card + 1 unrelated
   // "today" row from seed-sql.ts's section-grouping fixture group (added
   // today, published days ago — proves sections bucket by added_at, not
-  // published_at) = 21.
-  await expect(page.locator("#feed-section-today .feed-section-count")).toHaveText("21");
+  // published_at) + 2 more "today" rows from the facets fixture group
+  // (seed-sql.ts's facetsRows — deliberately half-today/half-earlier so the
+  // facets spec can prove its counts aren't just the loaded window) = 23.
+  await expect(page.locator("#feed-section-today .feed-section-count")).toHaveText("23");
   await expect(page.locator("#feed-section-yesterday .feed-section-count")).toHaveText("30");
 
   await page.locator(".tag-pill", { hasText: PAGINATION_TAG }).first().click();

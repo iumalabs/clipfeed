@@ -37,6 +37,20 @@ jobs:
       - name: Test
         run: deno task test
 
+      # Blocking, but at a deliberately realistic bar (85%, not 100%) —
+      # baseline at the time this was added was ~91% line / ~94% branch /
+      # ~94% function (see `deno task coverage` locally for the live
+      # per-file breakdown). Excludes _test.ts files themselves, testing/
+      # (fakes/test-only infra), vendor/ (self-hosted Swagger UI, never
+      # exercised by deno test), and scripts/ (dev/deploy tooling that
+      # mostly just wraps real `wrangler` subprocess calls — not
+      # meaningfully unit-testable without a live Cloudflare account, and
+      # not part of the deployed app). This is a floor against regression,
+      # not a mandate to chase literal 100% — see deno.json's coverage:check
+      # task for the exact command this runs.
+      - name: Coverage threshold
+        run: deno task coverage:check
+
       - name: Build
         run: deno task build
 
