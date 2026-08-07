@@ -2,6 +2,7 @@ import "../env.d.ts";
 import type { FaithfulnessJson, FaithfulnessVerdict, SummaryJson } from "@clipfeed/shared/types";
 import { safeFetchText } from "./ssrf.ts";
 import { extractArticle } from "./extract.ts";
+import { classifyArticleContent } from "./article-classifier.ts";
 import {
   deriveSummarySpec,
   generateEnglishFields,
@@ -538,6 +539,19 @@ export async function runArticlePipeline(env: Env, input: PipelineInput): Promis
       // filter, so a manual/extension/telegram save of the same host is
       // never blocked by this.
       await recordAutoBlockAgentSignal(env, input.url, insufficientTextReason);
+      return;
+    }
+
+    // Task 64: enough text to clear the guard above, but it reads as an
+    // About/legal/ad-info page rather than news (see article-classifier.ts)
+    // — checked here, BEFORE any LLM call, specifically so a page like this
+    // never reaches summarize() and burns tokens producing a hollow "no
+    // content to summarize" result from it.
+    const contentClassification = classifyArticleContent(extracted);
+    if (contentClassification.isNonArticle) {
+      const notNewsReason = `extraction: not a news article (${contentClassification.reason})`;
+      await markArticleFailed(env.DB, input.id, notNewsReason);
+      await recordAutoBlockAgentSignal(env, input.url, notNewsReason);
       return;
     }
 

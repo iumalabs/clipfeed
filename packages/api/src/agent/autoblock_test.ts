@@ -67,7 +67,7 @@ Deno.test("parseAutoblockTtlDays: undefined/empty falls back to the default, non
 
 // --- autoblockSignalWeight: the signal-scoring rules (Task 33 §7.1) ---
 
-Deno.test("autoblockSignalWeight: insufficient-text and paywalled both contribute +1", () => {
+Deno.test("autoblockSignalWeight: insufficient-text, paywalled, and not_news all contribute +1", () => {
   assertEquals(
     autoblockSignalWeight(classifyFailure("extraction: insufficient text (10 chars)")),
     1,
@@ -78,6 +78,12 @@ Deno.test("autoblockSignalWeight: insufficient-text and paywalled both contribut
   );
   assertEquals(
     autoblockSignalWeight(classifyFailure("internal: fetch: upstream responded 402")),
+    1,
+  );
+  assertEquals(
+    autoblockSignalWeight(
+      classifyFailure("extraction: not a news article (boilerplate markers: terms)"),
+    ),
     1,
   );
 });

@@ -1163,6 +1163,24 @@ sources may want a different value; raise it only with evidence (a real distribu
 genuinely-thin extractions are slipping through, since raising it blindly risks rejecting short
 bulletins/quotes as false positives.
 
+**Non-article page filter.** A page can clear `MIN_EXTRACTED_CHARS` and still not be news — an
+"About us"/legal/ad-info page whose own prose (privacy policy, advertising terms, "who we are")
+reads long enough to pass the length guard, but only ever produces a hollow summary if it reaches
+the LLM (the incident this fixes: a "content unavailable for processing" summary generated FROM a
+publication's own About page). `article-classifier.ts`'s `classifyArticleContent` checks this
+**right after** the `MIN_EXTRACTED_CHARS` guard and **before** any LLM call, specifically so a page
+like this never spends a token — a pure regex heuristic, not a second model call asking the
+summarizer to judge itself. It flags a page when either its title alone matches a known
+about/legal-page pattern (`"About Us"`, `"Privacy Policy"`, `"Terms of Service"`, …), or its body
+contains **3 or more distinct** boilerplate categories (privacy policy, terms, advertising, cookie
+policy, newsletter signup, contact us, rights-reserved, editorial-team, "independent media"
+self-positioning, "about us" phrasing) — requiring several distinct categories, not just several
+hits, keeps this conservative against flagging a real article that mentions one of these concepts in
+passing (e.g. a story about a company's privacy-policy violation). A page it rejects fails with
+`'extraction: not a news article (...)'`, classified `permanent` (`not_news`) — same reasoning as
+`insufficient_text`: retrying gets the same boilerplate every time, and repeat offenses from the
+same host feed the auto-block learning below just like `insufficient_text`/`paywalled` do.
+
 **Published date (`published_at`).** The card shows the source's original publication date (falling
 back to `added_at` — when the article entered this feed — when none is known; see
 `resolveCardDateIso` on the web side), while feed **sections** (Today/Yesterday/Earlier) always
@@ -1385,7 +1403,8 @@ so neither can ever overwrite the other by construction (enforced as a standing 
 `curation_isolation_test.ts`).
 
 - Each pipeline failure classified by the existing `classifyFailure` (see "Self-healing failures"
-  below) scores its host: `insufficient_text` or `paywalled` (403/402) → **+1**; **transient**
+  below) scores its host: `insufficient_text`, `paywalled` (403/402), or `not_news` (an About/legal/
+  ad-info page that isn't news — see "Non-article page filter" above) → **+1**; **transient**
   (5xx/timeouts) → **+0**, deliberately — an outage is evidence the upstream had a bad moment, not
   that the domain itself is unusable, and scoring it would eventually auto-block any
   flaky-but-otherwise-fine source given enough traffic.

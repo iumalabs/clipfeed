@@ -25,7 +25,8 @@ export type PermanentReasonKey =
   | "removed"
   | "ssrf_blocked"
   | "paywalled"
-  | "unfaithful";
+  | "unfaithful"
+  | "not_news";
 
 export interface FailureClassification {
   class: FailureClass;
@@ -93,6 +94,16 @@ const PERMANENT_RULES: { substring: string; reason: string; key: PermanentReason
     substring: "extraction: insufficient text",
     reason: "page has no substantive article text",
     key: "insufficient_text",
+  },
+  // Task 64: enough text to clear the length guard above, but it reads as
+  // an About/legal/ad-info page rather than news (see
+  // pipeline/article-classifier.ts) — retrying gets the exact same
+  // boilerplate every time, same reasoning as the other un-retryable
+  // reasons here.
+  {
+    substring: "extraction: not a news article",
+    reason: "page reads as boilerplate (about/legal/ad-info), not a news article",
+    key: "not_news",
   },
   { substring: "fetch: upstream responded 404", reason: "source page not found", key: "not_found" },
   {

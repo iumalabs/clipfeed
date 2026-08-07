@@ -17,6 +17,7 @@ const dict = {
   permanentReasonSsrfBlocked: "ссылка заблокирована политикой безопасности",
   permanentReasonPaywalled: "страница закрыта платным доступом",
   permanentReasonUnfaithful: "пересказ не подтверждён источником",
+  permanentReasonNotNews: "страница не похожа на новость (о компании, реклама и т.п.)",
   dailyLimitFailureLabel: "Дневной лимит выжимок исчерпан — обработается автоматически завтра",
 };
 
@@ -80,6 +81,16 @@ Deno.test("articleErrorText: a faithfulness enforce-mode discard shows the local
   assertEquals(
     articleErrorText("faithfulness: summary not supported by source", dict),
     "Не обработать: пересказ не подтверждён источником",
+  );
+});
+
+Deno.test("articleErrorText: a not-a-news-article permanent failure shows the localized reason", () => {
+  assertEquals(
+    articleErrorText(
+      "extraction: not a news article (boilerplate markers: privacy_policy, terms, contact_us)",
+      dict,
+    ),
+    "Не обработать: страница не похожа на новость (о компании, реклама и т.п.)",
   );
 });
 
