@@ -630,6 +630,98 @@ Deno.test("runArticlePipeline: extraction under 300 chars also records an auto-b
   assertEquals(await cache.get("autostat:mirror.example"), "1");
 });
 
+// --- runArticlePipeline: Task 64's non-article guard (About/legal/ad-info
+// pages that clear MIN_EXTRACTED_CHARS but aren't news) ---
+
+// Well over MIN_EXTRACTED_CHARS (300), unlike the thin-page fixture above —
+// this is exactly the incident the guard exists for: an About page whose
+// own prose reads long enough to pass the length guard, but produces a
+// hollow summary if it ever reaches the LLM.
+const ABOUT_PAGE_HTML =
+  `<html><head><title>About Us</title></head><body><article><h1>About Example Media</h1>` +
+  `<p>Example Media is an independent media outlet founded in 1999, covering technology, ` +
+  `business, and science for a global audience across print and digital editions worldwide.</p>` +
+  `<p>Read our privacy policy to learn how we handle your data, and see our terms of service ` +
+  `for the rules governing use of this site and its associated products and services.</p>` +
+  `<p>Contact us for editorial inquiries, or reach out about advertising with us if you are ` +
+  `interested in reaching our audience through sponsored placements and other opportunities.</p>` +
+  `<p>All rights reserved.</p></article></body></html>`;
+
+Deno.test("runArticlePipeline: an About/legal page that clears MIN_EXTRACTED_CHARS still fails fast, never calls the LLM", async () => {
+  let llmCalled = false;
+  const db = new ControllableD1();
+  const env = makePipelineEnv({
+    DB: db as unknown as D1Database,
+    AI: {
+      run(): Promise<unknown> {
+        llmCalled = true;
+        throw new Error("LLM should not be called for a non-article page");
+      },
+    },
+  });
+
+  await runArticlePipeline(env, {
+    id: "p-about",
+    url: "https://example.com/about",
+    html: ABOUT_PAGE_HTML,
+    requestTags: [],
+    addedVia: "manual",
+    alreadyEnforced: false,
+    source: null,
+    addedAt: "2026-01-01T00:00:00.000Z",
+  });
+
+  const row = db.rows.get("p-about");
+  assertEquals(row?.status, "failed");
+  assert((row?.error as string).startsWith("extraction: not a news article ("));
+  assertEquals(llmCalled, false);
+});
+
+Deno.test("runArticlePipeline: the non-article guard also records an auto-block signal", async () => {
+  const db = new ControllableD1();
+  const cache = new FakeKV();
+  const env = makePipelineEnv({
+    DB: db as unknown as D1Database,
+    CACHE: cache as unknown as KVNamespace,
+  });
+
+  await runArticlePipeline(env, {
+    id: "p-about-2",
+    url: "https://boilerplate.example/about",
+    html: ABOUT_PAGE_HTML,
+    requestTags: [],
+    addedVia: "manual",
+    alreadyEnforced: false,
+    source: null,
+    addedAt: "2026-01-01T00:00:00.000Z",
+  });
+
+  assertEquals(await cache.get("autostat:boilerplate.example"), "1");
+});
+
+Deno.test("runArticlePipeline: a real article that merely mentions a couple of these concepts in passing is NOT blocked, LLM is called", async () => {
+  const db = new ControllableD1();
+  const env = makePipelineEnv({ DB: db as unknown as D1Database });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (() => Promise.resolve(anthropicSuccessResponse())) as typeof fetch;
+  try {
+    await runArticlePipeline(env, {
+      id: "p-real",
+      url: "https://example.com/regulator-fines-company",
+      html: ARTICLE_HTML,
+      requestTags: [],
+      addedVia: "manual",
+      alreadyEnforced: false,
+      source: null,
+      addedAt: "2026-01-01T00:00:00.000Z",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assertEquals(db.rows.get("p-real")?.status, "ready");
+});
+
 // Task 58: MIN_EXTRACTED_CHARS is a configurable [vars] override (parsed by
 // summarize.ts's parseMinExtractedChars), not a hardcoded constant — this
 // article's extracted text is comfortably above the 300 default but below

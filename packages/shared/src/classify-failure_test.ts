@@ -103,6 +103,16 @@ Deno.test("classifyFailure: faithfulness enforce-mode discard is permanent", () 
   );
 });
 
+Deno.test("classifyFailure: not-a-news-article extraction is permanent", () => {
+  assertEquals(
+    classifyFailure(
+      "extraction: not a news article (boilerplate markers: privacy_policy, terms, contact_us)",
+    )
+      .class,
+    "permanent",
+  );
+});
+
 // --- permanentReasonKey (SPA localization signal) ---
 
 Deno.test("classifyFailure: each permanent rule sets its own distinct reason key", () => {
@@ -129,6 +139,11 @@ Deno.test("classifyFailure: each permanent rule sets its own distinct reason key
   assertEquals(
     classifyFailure("internal: fetch: upstream responded 402").permanentReasonKey,
     "paywalled",
+  );
+  assertEquals(
+    classifyFailure("extraction: not a news article (title matches a non-article page pattern)")
+      .permanentReasonKey,
+    "not_news",
   );
 });
 
