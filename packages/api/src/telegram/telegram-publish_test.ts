@@ -6,6 +6,7 @@ import {
   isWithinPublishWindow,
   MAX_PHOTO_BYTES,
   photoDimensionsWithinLimits,
+  publishArticleNow,
   publishNextArticle,
   runPublishJob,
   utcDayStartIso,
@@ -886,6 +887,142 @@ Deno.test("runPublishJob: sweeping twice is idempotent — the second tick doesn
 
     const row = db.rows.find((r) => r.id === "stale")!;
     assertEquals(row.telegram_published_at, TELEGRAM_SKIPPED_STALE_MARKER);
+  } finally {
+    stub.restore();
+  }
+});
+
+// --- publishArticleNow (Task 66: immediate publish for manually-added articles) ---
+
+Deno.test("publishArticleNow: publishes the named article regardless of added_at (bypasses the drip's today-only/oldest-first selection)", async () => {
+  const stub = stubTelegramFetch();
+  try {
+    const db = new FakeD1();
+    // A "today" candidate that would normally win the drip's oldest-first
+    // pick — publishArticleNow must ignore it and publish only the id it
+    // was asked for.
+    insertReadyArticle(db, { id: "older-today", added_at: TODAY_EARLY });
+    insertReadyArticle(db, { id: "target", added_at: TODAY_LATE });
+    const env = makeEnv({ DB: db as unknown as D1Database });
+
+    const outcome = await publishArticleNow(env, CONFIG, "target", NOW_MS);
+    assertEquals(outcome, { kind: "published", articleId: "target" });
+
+    assertEquals(stub.calls.length, 1);
+    assertEquals((stub.calls[0].body.text as string).includes("Заголовок"), true);
+
+    const untouched = db.rows.find((r) => r.id === "older-today")!;
+    assertEquals(untouched.telegram_published_at, null);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("publishArticleNow: a faithfulness 'fail' verdict is skipped — no Telegram call, but still marked published", async () => {
+  const stub = stubTelegramFetch();
+  try {
+    const db = new FakeD1();
+    insertReadyArticle(db, { id: "bad", added_at: TODAY_EARLY, faithfulness_verdict: "fail" });
+    const env = makeEnv({ DB: db as unknown as D1Database });
+
+    const outcome = await publishArticleNow(env, CONFIG, "bad", NOW_MS);
+    assertEquals(outcome, { kind: "skipped-unfaithful", articleId: "bad" });
+    assertEquals(stub.calls.length, 0);
+
+    const row = db.rows.find((r) => r.id === "bad")!;
+    assertEquals(typeof row.telegram_published_at, "string");
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("publishArticleNow: an already-published article is a safe no-op — 'empty', never a duplicate post", async () => {
+  const stub = stubTelegramFetch();
+  try {
+    const db = new FakeD1();
+    insertReadyArticle(db, {
+      id: "done",
+      added_at: TODAY_EARLY,
+      telegram_published_at: TODAY_LATE,
+    });
+    const env = makeEnv({ DB: db as unknown as D1Database });
+
+    const outcome = await publishArticleNow(env, CONFIG, "done", NOW_MS);
+    assertEquals(outcome, { kind: "empty" });
+    assertEquals(stub.calls.length, 0);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("publishArticleNow: an archived article is never published", async () => {
+  const stub = stubTelegramFetch();
+  try {
+    const db = new FakeD1();
+    insertReadyArticle(db, { id: "archived", added_at: TODAY_EARLY, archived: 1 });
+    const env = makeEnv({ DB: db as unknown as D1Database });
+
+    const outcome = await publishArticleNow(env, CONFIG, "archived", NOW_MS);
+    assertEquals(outcome, { kind: "empty" });
+    assertEquals(stub.calls.length, 0);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("publishArticleNow: an unknown id is a safe no-op", async () => {
+  const stub = stubTelegramFetch();
+  try {
+    const db = new FakeD1();
+    const env = makeEnv({ DB: db as unknown as D1Database });
+
+    const outcome = await publishArticleNow(env, CONFIG, "does-not-exist", NOW_MS);
+    assertEquals(outcome, { kind: "empty" });
+    assertEquals(stub.calls.length, 0);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("publishArticleNow: still respects the daily cap — 'cap-reached', no Telegram call, article stays unpublished", async () => {
+  const stub = stubTelegramFetch();
+  try {
+    const db = new FakeD1();
+    insertReadyArticle(db, { id: "target", added_at: TODAY_EARLY });
+    const env = makeEnv({ DB: db as unknown as D1Database });
+    await env.CACHE.put(publishCountKey(utcIso(NOW_MS)), String(DEFAULT_PUBLISH_MAX_PER_DAY));
+
+    const outcome = await publishArticleNow(env, CONFIG, "target", NOW_MS);
+    assertEquals(outcome, { kind: "cap-reached", maxPerDay: DEFAULT_PUBLISH_MAX_PER_DAY });
+    assertEquals(stub.calls.length, 0);
+
+    const row = db.rows.find((r) => r.id === "target")!;
+    assertEquals(row.telegram_published_at, null);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("publishArticleNow: sends via sendPhoto when a stored image is within limits, same as the drip queue's own path", async () => {
+  const stub = stubTelegramFetch();
+  try {
+    const db = new FakeD1();
+    insertReadyArticle(db, {
+      id: "target",
+      added_at: TODAY_EARLY,
+      image_key: "articles/target.jpg",
+      image_width: 1200,
+      image_height: 630,
+    });
+    const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+    const env = makeEnv({
+      DB: db as unknown as D1Database,
+      IMAGES: makeFakeImagesBucket(bytes, "image/jpeg"),
+    });
+
+    const outcome = await publishArticleNow(env, CONFIG, "target", NOW_MS);
+    assertEquals(outcome, { kind: "published", articleId: "target" });
+    assertEquals(stub.calls[0].method, "sendPhoto");
   } finally {
     stub.restore();
   }

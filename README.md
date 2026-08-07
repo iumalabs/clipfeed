@@ -986,6 +986,23 @@ tick, so across the default 4–18 UTC window that's up to 14 posts a day — we
 total. An article is marked published the moment it's posted (or skipped — see below) so it's never
 sent twice, even across restarts or config changes.
 
+### Immediate publish for manually-added articles
+
+Task 66: an article added through the SPA's "Add" modal (`added_via: "manual"`) posts to the
+Telegram channel **immediately** once its pipeline run reaches `ready`, instead of waiting for the
+next hourly drip tick — the owner explicitly chose to save this one right now, so there's no reason
+to make it wait in the same queue as agent-picked articles. The hook fires once, right after the
+image stage (so a same-post photo upload is possible when an `og:image` was found — same
+`sendPhoto`/`sendMessage` logic as the drip queue itself, see above), for both a fresh pipeline run
+and a resummarize. It bypasses `PUBLISH_START_HOUR_UTC`/`PUBLISH_END_HOUR_UTC` (same precedent as
+the owner-only `/publish` command) but still respects `PUBLISH_MAX_PER_DAY` and the
+faithfulness-fail skip — a manual-add binge can't flood the channel any more than the drip could,
+and a likely- inaccurate summary still never gets posted. Articles added via the extension, the
+daily scraping agent, or Telegram's own URL-drop stay on the regular hourly drip; only `manual` gets
+the immediate post. If Telegram isn't configured, `PUBLISH_ENABLED` is `"false"`, or the send itself
+fails, the article still ends up `ready` as normal — a missing/misbehaving Telegram integration
+never blocks or fails an otherwise-successful add.
+
 ### Today-only selection and stale articles
 
 Task 37: the drip selects only articles added on the **current UTC calendar day** — not a rolling
