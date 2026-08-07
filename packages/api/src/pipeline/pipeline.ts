@@ -44,6 +44,8 @@ import {
   resolveEmbeddingModel,
   upsertArticleEmbedding,
 } from "../search/embeddings.ts";
+import { readTelegramConfig } from "../telegram/telegram-client.ts";
+import { isPublishEnabled, publishArticleNow } from "../telegram/telegram-publish.ts";
 
 export interface PipelineInput {
   id: string;
@@ -467,6 +469,42 @@ async function runImageStage(
   }
 }
 
+// Task 66: a manually-added article posts to the Telegram channel
+// immediately once it's fully ready, rather than waiting for the next
+// hourly drip tick — the owner explicitly chose to save this one right
+// now, so quiet hours (PUBLISH_START_HOUR_UTC/END) don't apply, same
+// precedent as the owner-only /publish command (see telegram-publish.ts's
+// doc comment); the daily cap (PUBLISH_MAX_PER_DAY) still does, same flood
+// guard as the drip queue. Placed AFTER runImageStage (not right after
+// markArticleReady) so a same-post photo upload is possible instead of
+// always falling back to the no-image path. Every failure here is caught
+// and logged, never rethrown — like runEmbedStage/runImageStage above, a
+// Telegram outage must never turn an already-successfully-summarized
+// article back into 'failed'. publishArticleNow's own
+// telegram_published_at IS NULL guard makes this naturally idempotent, so
+// calling it again from a later resummarize of the same (already
+// published) article is a safe no-op, not a duplicate post.
+async function runImmediatePublishStage(env: Env, id: string, addedVia: string): Promise<void> {
+  if (addedVia !== "manual") return;
+  const publishStart = performance.now();
+  try {
+    const config = readTelegramConfig(env);
+    if (!config) {
+      logStage(id, "immediate_publish", publishStart, { outcome: "skipped_not_configured" });
+      return;
+    }
+    if (!isPublishEnabled(env.PUBLISH_ENABLED)) {
+      logStage(id, "immediate_publish", publishStart, { outcome: "skipped_disabled" });
+      return;
+    }
+    const outcome = await publishArticleNow(env, config, id);
+    logStage(id, "immediate_publish", publishStart, { outcome: outcome.kind });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(JSON.stringify({ event: "immediate_publish_stage_failed", id, error: message }));
+  }
+}
+
 // Runs the full fetch -> extract -> summarize -> persist pipeline for one
 // article. Called from ctx.executionCtx.waitUntil() — the top-level
 // try/catch below guarantees a terminal 'ready'/'failed' status for any
@@ -600,6 +638,7 @@ export async function runArticlePipeline(env: Env, input: PipelineInput): Promis
       addedAt: input.addedAt,
     });
     await runImageStage(env, input.id, html, input.url);
+    await runImmediatePublishStage(env, input.id, input.addedVia);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const reason = `internal: ${stage}: ${message}`.slice(0, 200);
@@ -737,6 +776,7 @@ export async function runResummarization(env: Env, input: ResummarizeInput): Pro
       source: input.source,
       addedAt: input.addedAt,
     });
+    await runImmediatePublishStage(env, input.id, input.addedVia);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const reason = `internal: ${stage}: ${message}`.slice(0, 200);

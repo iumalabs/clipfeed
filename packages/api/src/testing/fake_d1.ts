@@ -526,6 +526,34 @@ export class FakeD1 implements D1Database {
       return [{ count }];
     }
 
+    // Task 66: getPublishCandidateById — same SELECT column list/prefix as
+    // getNextPublishCandidate below, but scoped to one known id (WHERE
+    // id = ? first) instead of "oldest within a window". Must be checked
+    // BEFORE the startsWith branch below, since that branch shares this
+    // exact column-list prefix and would otherwise misread the bound id as
+    // a `since` date string.
+    if (
+      sql ===
+        "SELECT id, url, source, faithfulness_verdict, summary_json, image_key, image_width, image_height FROM articles WHERE id = ? AND status = 'ready' AND archived = 0 AND telegram_published_at IS NULL"
+    ) {
+      const id = values[0] as string;
+      const row = this.rows.find((r) =>
+        r.id === id && r.status === "ready" && r.archived === 0 && r.telegram_published_at === null
+      );
+      return row
+        ? [{
+          id: row.id,
+          url: row.url,
+          source: row.source,
+          faithfulness_verdict: row.faithfulness_verdict,
+          summary_json: row.summary_json,
+          image_key: row.image_key ?? null,
+          image_width: row.image_width ?? null,
+          image_height: row.image_height ?? null,
+        }]
+        : [];
+    }
+
     if (
       sql.startsWith(
         "SELECT id, url, source, faithfulness_verdict, summary_json, image_key, image_width, image_height FROM articles",

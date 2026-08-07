@@ -7,6 +7,9 @@ import {
   runSummarization,
   selectProviderMode,
 } from "./pipeline.ts";
+import { FakeD1 } from "../testing/fake_d1.ts";
+import { insertPendingArticle } from "../articles/db.ts";
+import type { AddedVia } from "@clipfeed/shared/types";
 
 // Meets validateSummary's content bar (>=120 char tldrs, 3-6 bullets each
 // 20-220 chars and not duplicating the tldr, 1-6 tags) — see summarize.ts.
@@ -1475,5 +1478,276 @@ Deno.test("runResummarization: input.priorViolations reaches the summarize call'
     );
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+// --- Task 66: runImmediatePublishStage (manual adds post to Telegram right away) ---
+
+// FakeD1 (not ControllableD1) is required here: publishArticleNow's
+// getPublishCandidateById does a real SELECT (via .first()), which
+// ControllableD1 always answers with null — fine for the terminal-state
+// tests above (which only assert on markArticleReady/markArticleFailed
+// writes), but it would make every one of these tests see "no candidate"
+// regardless of what actually happened.
+function insertPendingForPublishTest(
+  db: FakeD1,
+  id: string,
+  addedVia: AddedVia,
+): Promise<void> {
+  return insertPendingArticle(db, {
+    id,
+    url: `https://example.com/${id}`,
+    title: "Example",
+    source: "example.com",
+    tags: ["seed"],
+    added_via: addedVia,
+    added_at: "2026-01-02T00:00:00.000Z",
+  });
+}
+
+const TELEGRAM_CONFIG_ENV: Partial<Env> = {
+  TELEGRAM_BOT_TOKEN: "t",
+  TELEGRAM_WEBHOOK_SECRET: "s",
+  TELEGRAM_OWNER_CHAT_ID: "999",
+};
+
+function stubAnthropicAndTelegramFetch(): {
+  restore: () => void;
+  telegramCalls: { method: string; body: Record<string, unknown> }[];
+} {
+  const originalFetch = globalThis.fetch;
+  const telegramCalls: { method: string; body: Record<string, unknown> }[] = [];
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    const url = input.toString();
+    const tgMatch = url.match(/^https:\/\/api\.telegram\.org\/bot[^/]+\/(\w+)$/);
+    if (tgMatch) {
+      const body = init?.body ? JSON.parse(init.body as string) : {};
+      telegramCalls.push({ method: tgMatch[1], body });
+      return Promise.resolve(Response.json({ ok: true, result: { message_id: 1 } }));
+    }
+    return Promise.resolve(anthropicSuccessResponse());
+  }) as typeof fetch;
+  return {
+    restore: () => {
+      globalThis.fetch = originalFetch;
+    },
+    telegramCalls,
+  };
+}
+
+Deno.test("runArticlePipeline: a manually-added article posts to Telegram immediately once ready, when configured/enabled", async () => {
+  const stub = stubAnthropicAndTelegramFetch();
+  try {
+    const db = new FakeD1();
+    await insertPendingForPublishTest(db, "manual-1", "manual");
+    const env = makePipelineEnv({ DB: db as unknown as D1Database, ...TELEGRAM_CONFIG_ENV });
+
+    await runArticlePipeline(env, {
+      id: "manual-1",
+      url: "https://example.com/manual-1",
+      html: ARTICLE_HTML,
+      requestTags: [],
+      addedVia: "manual",
+      alreadyEnforced: false,
+      source: null,
+      addedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    const row = db.rows.find((r) => r.id === "manual-1")!;
+    assertEquals(row.status, "ready");
+    assertEquals(typeof row.telegram_published_at, "string");
+    assertEquals(stub.telegramCalls.length, 1);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("runArticlePipeline: an agent-added article is NOT posted immediately — the hourly drip queue handles it instead", async () => {
+  const stub = stubAnthropicAndTelegramFetch();
+  try {
+    const db = new FakeD1();
+    await insertPendingForPublishTest(db, "agent-1", "agent");
+    const env = makePipelineEnv({ DB: db as unknown as D1Database, ...TELEGRAM_CONFIG_ENV });
+
+    await runArticlePipeline(env, {
+      id: "agent-1",
+      url: "https://example.com/agent-1",
+      html: ARTICLE_HTML,
+      requestTags: [],
+      addedVia: "agent",
+      alreadyEnforced: false,
+      source: null,
+      addedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    const row = db.rows.find((r) => r.id === "agent-1")!;
+    assertEquals(row.status, "ready");
+    assertEquals(row.telegram_published_at, null);
+    assertEquals(stub.telegramCalls.length, 0);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("runArticlePipeline: a manually-added article with Telegram unconfigured stays 'ready', no throw, no Telegram call", async () => {
+  const stub = stubAnthropicAndTelegramFetch();
+  try {
+    const db = new FakeD1();
+    await insertPendingForPublishTest(db, "manual-2", "manual");
+    const env = makePipelineEnv({ DB: db as unknown as D1Database }); // no TELEGRAM_* vars
+
+    await runArticlePipeline(env, {
+      id: "manual-2",
+      url: "https://example.com/manual-2",
+      html: ARTICLE_HTML,
+      requestTags: [],
+      addedVia: "manual",
+      alreadyEnforced: false,
+      source: null,
+      addedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    const row = db.rows.find((r) => r.id === "manual-2")!;
+    assertEquals(row.status, "ready");
+    assertEquals(row.telegram_published_at, null);
+    assertEquals(stub.telegramCalls.length, 0);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("runArticlePipeline: PUBLISH_ENABLED='false' suppresses the immediate publish, article still ends 'ready'", async () => {
+  const stub = stubAnthropicAndTelegramFetch();
+  try {
+    const db = new FakeD1();
+    await insertPendingForPublishTest(db, "manual-3", "manual");
+    const env = makePipelineEnv({
+      DB: db as unknown as D1Database,
+      ...TELEGRAM_CONFIG_ENV,
+      PUBLISH_ENABLED: "false",
+    });
+
+    await runArticlePipeline(env, {
+      id: "manual-3",
+      url: "https://example.com/manual-3",
+      html: ARTICLE_HTML,
+      requestTags: [],
+      addedVia: "manual",
+      alreadyEnforced: false,
+      source: null,
+      addedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    const row = db.rows.find((r) => r.id === "manual-3")!;
+    assertEquals(row.status, "ready");
+    assertEquals(row.telegram_published_at, null);
+    assertEquals(stub.telegramCalls.length, 0);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("runArticlePipeline: a Telegram send failure never flips an already-successful article to 'failed'", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const db = new FakeD1();
+    await insertPendingForPublishTest(db, "manual-4", "manual");
+    globalThis.fetch = ((input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.startsWith("https://api.telegram.org/")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: false }), { status: 500 }),
+        );
+      }
+      return Promise.resolve(anthropicSuccessResponse());
+    }) as typeof fetch;
+    const env = makePipelineEnv({ DB: db as unknown as D1Database, ...TELEGRAM_CONFIG_ENV });
+
+    await runArticlePipeline(env, {
+      id: "manual-4",
+      url: "https://example.com/manual-4",
+      html: ARTICLE_HTML,
+      requestTags: [],
+      addedVia: "manual",
+      alreadyEnforced: false,
+      source: null,
+      addedAt: "2026-01-02T00:00:00.000Z",
+    }); // must not throw
+
+    const row = db.rows.find((r) => r.id === "manual-4")!;
+    assertEquals(row.status, "ready");
+    assertEquals(row.telegram_published_at, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("runResummarization: a manually-added article that just went ready for the first time is posted immediately", async () => {
+  const stub = stubAnthropicAndTelegramFetch();
+  try {
+    const db = new FakeD1();
+    await insertPendingForPublishTest(db, "resum-1", "manual");
+    const env = makePipelineEnv({ DB: db as unknown as D1Database, ...TELEGRAM_CONFIG_ENV });
+
+    await runResummarization(env, {
+      id: "resum-1",
+      title: "Example",
+      author: null,
+      fullText:
+        "Hello world, this is enough article text to clear the minimum length guard used elsewhere in these tests.",
+      requestTags: [],
+      addedVia: "manual",
+      alreadyEnforced: false,
+      source: null,
+      addedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    const row = db.rows.find((r) => r.id === "resum-1")!;
+    assertEquals(row.status, "ready");
+    assertEquals(typeof row.telegram_published_at, "string");
+    assertEquals(stub.telegramCalls.length, 1);
+  } finally {
+    stub.restore();
+  }
+});
+
+Deno.test("runResummarization: re-summarizing an already-published article is idempotent — no duplicate Telegram post", async () => {
+  const stub = stubAnthropicAndTelegramFetch();
+  try {
+    const db = new FakeD1();
+    await insertPendingForPublishTest(db, "resum-2", "manual");
+    const env = makePipelineEnv({ DB: db as unknown as D1Database, ...TELEGRAM_CONFIG_ENV });
+
+    await runResummarization(env, {
+      id: "resum-2",
+      title: "Example",
+      author: null,
+      fullText:
+        "Hello world, this is enough article text to clear the minimum length guard used elsewhere in these tests.",
+      requestTags: [],
+      addedVia: "manual",
+      alreadyEnforced: false,
+      source: null,
+      addedAt: "2026-01-02T00:00:00.000Z",
+    });
+    assertEquals(stub.telegramCalls.length, 1);
+
+    // A second resummarize of the same, now-already-published article.
+    await runResummarization(env, {
+      id: "resum-2",
+      title: "Example",
+      author: null,
+      fullText:
+        "Hello world, this is enough article text to clear the minimum length guard used elsewhere in these tests, resummarized.",
+      requestTags: [],
+      addedVia: "manual",
+      alreadyEnforced: false,
+      source: null,
+      addedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    assertEquals(stub.telegramCalls.length, 1); // still just the one post
+  } finally {
+    stub.restore();
   }
 });
