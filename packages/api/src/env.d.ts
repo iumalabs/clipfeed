@@ -170,7 +170,11 @@ declare global {
     // — a distinct, longer budget than PENDING_TIMEOUT_MIN because a message
     // can legitimately wait behind others under queue backpressure
     // (max_concurrency = 3 in wrangler.toml) without anything actually being
-    // stuck.
+    // stuck. Task 65: sized against worst-case burst-drain time, which
+    // scales with AGENT_DAILY_PICKS — see wrangler.toml's comment on this var
+    // for the exact arithmetic (a doubled AGENT_DAILY_PICKS needs a
+    // correspondingly wider budget here, or this fires on messages that are
+    // still genuinely in flight, not lost).
     QUEUE_WAIT_TIMEOUT_MIN: number;
     // LLM credentials/routing: pick one mode, in priority order —
     // AI Gateway (AI_GATEWAY_URL [+ CF_AIG_TOKEN]) > direct (ANTHROPIC_API_KEY)
