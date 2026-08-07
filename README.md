@@ -59,13 +59,18 @@ Two layers, both required to run cleanly before opening a PR:
   immediately instead of surfacing later as a quietly-broken SPA feature.
 - **`deno task e2e`** — a small Playwright suite (`e2e/`) covering browser-integration regressions
   unit tests structurally can't see: feed pagination + the poll's merge-without-truncation
-  guarantee, EN-translate viewport gating, owner-vs-visitor visibility, keyword/semantic search, and
-  deep-link + logo reset. It boots a real local `wrangler dev` against an isolated D1
-  (`.wrangler-e2e/`, entirely separate from `deno task dev`'s own `.wrangler/` state), seeds
-  deterministic fixtures directly via SQL (never through the real pipeline, so no Workers AI call —
-  even local `wrangler dev` calls the real Cloudflare account for AI/Vectorize, which this suite
-  avoids entirely), runs the suite, then tears everything down. Playwright runs under **Node**
-  (`e2e/` is a small sidecar with its own `package.json`), not Deno's npm compat — Playwright's
+  guarantee, EN-translate viewport gating, owner-vs-visitor visibility, keyword/semantic search,
+  deep-link + logo reset, true all-time tag/source facet counts, owner archive/unarchive/delete, the
+  unknown-path 404 view, and the faithfulness badge's actionable per-claim detail. Deliberately does
+  **not** exercise retry/resummarize/create-new-article — those enqueue a real
+  fetch→extract→summarize pipeline run, which for this suite's fake `e2e-*.example.com` fixture
+  domains means a real, slow, doomed-to-fail network call (see `e2e/tests/owner-actions.spec.ts`'s
+  doc comment). It boots a real local `wrangler dev` against an isolated D1 (`.wrangler-e2e/`,
+  entirely separate from `deno task dev`'s own `.wrangler/` state), seeds deterministic fixtures
+  directly via SQL (never through the real pipeline, so no Workers AI call — even local
+  `wrangler dev` calls the real Cloudflare account for AI/Vectorize, which this suite avoids
+  entirely), runs the suite, then tears everything down. Playwright runs under **Node** (`e2e/` is a
+  small sidecar with its own `package.json`), not Deno's npm compat — Playwright's
   browser-automation internals are Node-first and heavily process/worker-thread-dependent, and
   keeping it isolated means it can never disrupt the existing `deno task` commands. First run needs
   `npx --prefix e2e playwright install --with-deps
@@ -83,6 +88,18 @@ Two layers, both required to run cleanly before opening a PR:
   `.github/workflows/ci.yml`'s comment for the reasoning (browser E2E carries more infra-flake risk
   than the fast test job, and the drift class it exists to catch is already caught deterministically
   by the contract tests above, which do block).
+
+**Coverage gate:** `deno task coverage` runs `deno task test` under `deno test --coverage` and
+prints the per-file line/branch/function report; `deno task coverage:check` does the same and fails
+if any of the three drops below **85%** (`deno coverage`'s own `--threshold` flag) — a blocking step
+in CI's `check` job. The bar is deliberately a realistic floor, not literal 100%: it's meant to
+catch a real regression (a big new untested module, an accidentally-skipped test file), not to force
+every last edge case and CLI-glue branch to be unit-tested. Excludes `_test.ts` files themselves,
+`testing/` (fakes/test-only infra), `packages/web/vendor/` (self-hosted Swagger UI, never exercised
+by `deno test`), and `scripts/` (dev/deploy tooling that mostly wraps real `wrangler` subprocess
+calls — not meaningfully unit-testable without a live Cloudflare account, and not part of the
+deployed app). This measures `deno test`'s own coverage only — it says nothing about the Playwright
+suite above, which covers browser-integration behavior no unit test can see in the first place.
 
 ### Git hooks
 
