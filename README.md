@@ -606,9 +606,13 @@ distinct error strings:
   worst-case wall time (`SUMMARIZE_CALL_TIMEOUT_MS` x2 + `JUDGE_CALL_TIMEOUT_MS` x2 + fetch/extract/
   embed/image overhead ≈ 357s/~6 min) — 6 minutes was considered and rejected as too tight (only ~3s
   of margin).
-- **`QUEUE_WAIT_TIMEOUT_MIN`** (default `30`) — from `added_at`, only for rows where
+- **`QUEUE_WAIT_TIMEOUT_MIN`** (default `60`) — from `added_at`, only for rows where
   `processing_started_at` is still `NULL`; a message that's been sitting in the queue this long
   without a consumer ever touching it is marked `'failed'` with `"queue: never picked up"`.
+  Classified `transient` by `classifyFailure` (same reasoning as `PENDING_TIMEOUT_MIN`'s sibling
+  error above — a message not yet delivered says nothing about whether a fresh enqueue of the same
+  article would also stall), so the self-healing sweep retries it automatically; see "Burst
+  behavior" below for how this default was sized.
 
 Both branches re-check `status = 'pending'` inside their own `UPDATE`'s `WHERE` clause (not a stale
 prior `SELECT`), so a pipeline that completes concurrently with a sweep always wins — the sweep
@@ -642,6 +646,23 @@ terminal-state guarantee + DLQ consumer + healing sweep already fully bound the 
 attempt 2, no message reached the DLQ and no article was left stuck — a message that exhausted all 3
 attempts would land in the DLQ and get terminal-failed there anyway, then get picked up by the
 self-healing sweep like any other transient failure.
+
+**Task 65 follow-up — `AGENT_DAILY_PICKS` 10 → 20 outgrew the old `QUEUE_WAIT_TIMEOUT_MIN`:** the
+math above was never checked against burst SIZE, only against per-message duration. Worst-case
+per-message wall time is ~357s (see `PENDING_TIMEOUT_MIN`'s own arithmetic above), and with
+`max_concurrency = 3` a same-day burst drains in `ceil(picks / 3)` sequential rounds — at the old
+`AGENT_DAILY_PICKS` default of 10 that's `ceil(10/3) x 357s ≈ 24 min`, already only ~6 minutes of
+margin under the old 30-minute `QUEUE_WAIT_TIMEOUT_MIN`. Doubling `AGENT_DAILY_PICKS` to 20 pushed
+the same worst case to `ceil(20/3) x 357s ≈ 42 min` — past the old timeout, so a live incident
+showed several real, still-in-flight tail messages from a 20-pick burst getting marked
+`'queue: never picked
+up'` (visible to the owner as failed cards needing a manual Retry) even though
+nothing was actually lost, just still draining through backpressure. `QUEUE_WAIT_TIMEOUT_MIN` is now
+`60` (default), giving comfortable margin (~44%) over the recomputed worst case at the new burst
+size. Also fixed alongside this: `classifyFailure("queue: never picked up")` had never been added to
+the `transient` rule list (unlike its sibling `"timeout: processing did not complete"`), so these
+rows were healing on `unknown`'s lower cap (1 attempt) instead of `transient`'s (2) — see
+`classify-failure.ts`.
 
 **Forkability / graceful degradation:** if the `JOBS` binding isn't available (the queue hasn't been
 provisioned yet, or any environment that hasn't wired `[[queues.producers]]`), the app falls back to

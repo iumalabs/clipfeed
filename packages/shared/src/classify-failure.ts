@@ -58,6 +58,16 @@ const TRANSIENT_RULES: { substring: string; reason: string }[] = [
     reason: "queue exhausted retries (dead-lettered)",
   },
   { substring: "timeout: processing did not complete", reason: "stale-pending sweeper timeout" },
+  // Sibling of the processing-timeout rule above (see sweepStalePending's
+  // queue-wait branch in db.ts) — a message that sat in the queue past
+  // QUEUE_WAIT_TIMEOUT_MIN without a consumer ever touching it says nothing
+  // about whether a FRESH enqueue of the same article would also stall; it's
+  // just as retryable as a stuck-mid-pipeline timeout. Was missing from this
+  // list entirely until an AGENT_DAILY_PICKS increase made this fire often
+  // enough to notice: it fell through to 'unknown' (healing.ts's HEAL_CAPS
+  // gives that only 1 attempt, vs. 2 for 'transient'), so bursts of failures
+  // were healing more slowly than they should have.
+  { substring: "queue: never picked up", reason: "queue-wait sweeper timeout" },
   // Resets at UTC midnight (see cost-guard.ts) — "permanent" today, gone
   // by tomorrow, so a later retry is expected to succeed on its own.
   { substring: "daily-limit", reason: "daily summary budget exhausted" },

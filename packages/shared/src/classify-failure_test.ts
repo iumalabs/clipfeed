@@ -61,6 +61,17 @@ Deno.test("classifyFailure: stale-pending sweeper timeout is transient", () => {
   assertEquals(classifyFailure("timeout: processing did not complete").class, "transient");
 });
 
+// Regression: this sibling of the processing-timeout rule above (see
+// sweepStalePending's queue-wait branch in db.ts) was missing from
+// TRANSIENT_RULES entirely, so it fell through to 'unknown' — a real
+// production incident (a burst of agent-added articles queued behind
+// max_concurrency, several tail messages exceeding QUEUE_WAIT_TIMEOUT_MIN)
+// surfaced this: those rows got only 1 healing attempt (unknown's cap)
+// instead of 2 (transient's cap), see healing.ts's HEAL_CAPS.
+Deno.test("classifyFailure: queue-wait sweeper timeout ('queue: never picked up') is transient, not unknown", () => {
+  assertEquals(classifyFailure("queue: never picked up").class, "transient");
+});
+
 Deno.test("classifyFailure: daily-limit is transient (resets tomorrow), not permanent", () => {
   const result = classifyFailure("daily-limit");
   assertEquals(result.class, "transient");

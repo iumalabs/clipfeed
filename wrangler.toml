@@ -30,7 +30,19 @@ REPO_URL = "https://github.com/maksimyugai/clipfeed"
 # margin -- not enough to avoid killing genuinely-still-working live jobs.
 # Set to 8 instead; see CLAUDE.md/PR description for the full arithmetic.
 PENDING_TIMEOUT_MIN = 8
-QUEUE_WAIT_TIMEOUT_MIN = 30
+# Task 65: worst-case per-message pipeline duration (SUMMARIZE_CALL_TIMEOUT_MS
+# x2 + JUDGE_CALL_TIMEOUT_MS x2 + overhead ~= 357s, see PENDING_TIMEOUT_MIN's
+# own comment above) times ceil(AGENT_DAILY_PICKS / max_concurrency) gives the
+# worst-case time for a same-day agent burst to fully drain through the
+# clipfeed-jobs consumer (max_concurrency = 3 below): at the old
+# AGENT_DAILY_PICKS default of 10 that's ceil(10/3) x 357s ~= 24 min, already
+# uncomfortably close to the old 30-minute default here; raising
+# AGENT_DAILY_PICKS to 20 pushed the same math to ceil(20/3) x 357s ~= 42 min
+# -- past the old timeout, so tail messages in a big burst were being marked
+# 'queue: never picked up' while genuinely still waiting behind backpressure,
+# not actually lost. Doubled to keep pace, landing back at a similar ~40%
+# margin over the recomputed worst case.
+QUEUE_WAIT_TIMEOUT_MIN = 60
 INTEREST_TOPICS = "AI/LLMs and their engineering; computer hardware — CPUs, GPUs, NVIDIA/Intel/AMD, chips; Linux — kernel, distributions, open source ecosystem; software development and programming languages; Cloudflare and edge computing; security — vulnerabilities, breaches, exploits, threat research; notable science/tech news"
 AGENT_HOUR_UTC = "5"
 # Curated variety (Task 33, README "Curated variety"): topic quotas,
