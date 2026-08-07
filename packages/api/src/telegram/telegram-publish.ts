@@ -1,6 +1,7 @@
 import "../env.d.ts";
 import {
   getNextPublishCandidate,
+  getPublishCandidateById,
   markStaleArticlesSkipped,
   markTelegramPublished,
   type PublishCandidate,
@@ -204,24 +205,22 @@ export type PublishOutcome =
   | { kind: "empty" }
   | { kind: "cap-reached"; maxPerDay: number };
 
-// The one shared "advance the drip queue by one" step, used by BOTH the
-// hourly cron job (gated by window/enabled, see runPublishJob below) and
-// the owner-only /publish command (which forces it immediately, ignoring
-// the window — but NOT the cap, see §4). A faithfulness-'fail' candidate is
-// never sent to Telegram — broadcasting a likely-inaccurate summary is
-// worse than silence — but is still marked published so the queue advances
-// past it on the next tick instead of retrying the same skip forever. That
+// The one shared "send this specific candidate" step — used by
+// publishNextArticle (drip queue: looks up whichever candidate is oldest)
+// and publishArticleNow (Task 66: immediate publish for a manually-added
+// article that already knows its own id). Same cap/faithfulness/photo
+// logic either way; only how the candidate is FOUND differs between the
+// two callers. A faithfulness-'fail' candidate is never sent to Telegram —
+// broadcasting a likely-inaccurate summary is worse than silence — but is
+// still marked published so nothing retries the same skip forever. That
 // skip never touches the daily cap: it never reaches Telegram, so it can't
 // contribute to flooding the channel.
-export async function publishNextArticle(
+async function publishCandidate(
   env: Env,
   config: TelegramConfig,
-  nowMs: number = Date.now(),
+  candidate: PublishCandidate,
+  nowMs: number,
 ): Promise<PublishOutcome> {
-  const since = utcDayStartIso(nowMs);
-  const candidate = await getNextPublishCandidate(env.DB, since);
-  if (!candidate) return { kind: "empty" };
-
   const now = new Date(nowMs).toISOString();
 
   if (candidate.faithfulness_verdict === "fail") {
@@ -293,6 +292,44 @@ export async function publishNextArticle(
   await markTelegramPublished(env.DB, candidate.id, now);
   await incrementPublishCount(env.CACHE, nowMs, countToday);
   return { kind: "published", articleId: candidate.id };
+}
+
+// The drip queue's own "advance by one" step — looks up whichever ready,
+// unpublished, today-added article is oldest, then delegates to
+// publishCandidate above. Used by BOTH the hourly cron job (gated by
+// window/enabled, see runPublishJob below) and the owner-only /publish
+// command (which forces it immediately, ignoring the window — but NOT the
+// cap, see §4).
+export async function publishNextArticle(
+  env: Env,
+  config: TelegramConfig,
+  nowMs: number = Date.now(),
+): Promise<PublishOutcome> {
+  const since = utcDayStartIso(nowMs);
+  const candidate = await getNextPublishCandidate(env.DB, since);
+  if (!candidate) return { kind: "empty" };
+  return await publishCandidate(env, config, candidate, nowMs);
+}
+
+// Task 66: publishes ONE specific article right now, for the "manually-added
+// articles post to the channel immediately" feature (see pipeline.ts's
+// runImmediatePublishStage) — deliberately NOT drawn from the drip queue's
+// "oldest unpublished" query, since the caller already knows exactly which
+// row just went ready. getPublishCandidateById's own WHERE guards (ready,
+// non-archived, telegram_published_at IS NULL) make this naturally
+// idempotent: a resummarize of an already-published article is a silent
+// {kind: "empty"} here, never a duplicate post. Same cap as the drip queue
+// — an immediate publish still counts against PUBLISH_MAX_PER_DAY, so a
+// manual-add binge can't flood the channel any more than the drip could.
+export async function publishArticleNow(
+  env: Env,
+  config: TelegramConfig,
+  articleId: string,
+  nowMs: number = Date.now(),
+): Promise<PublishOutcome> {
+  const candidate = await getPublishCandidateById(env.DB, articleId);
+  if (!candidate) return { kind: "empty" };
+  return await publishCandidate(env, config, candidate, nowMs);
 }
 
 // Called by the hourly cron (see scheduled.ts, which passes the tick's own
