@@ -1181,6 +1181,23 @@ passing (e.g. a story about a company's privacy-policy violation). A page it rej
 `insufficient_text`: retrying gets the same boilerplate every time, and repeat offenses from the
 same host feed the auto-block learning below just like `insufficient_text`/`paywalled` do.
 
+`classifyArticleContent` is a small **pluggable registry** (`CONTENT_FILTERS` in
+`article-classifier.ts`), not a single hardcoded check — the boilerplate check above is one entry in
+that registry; adding a new kind of non-article page is meant to be a single new entry, not a change
+to `classifyArticleContent` itself, its call site in `pipeline.ts`, or `classify-failure.ts` (every
+filter's hit is wrapped in the same `'extraction: not a news article (...)'` prefix, which already
+maps to the single `not_news` reason). The second built-in entry, `ADVERTISEMENT_FILTER`, catches a
+sponsored product-deal roundup ("39% off, was $49.99, now $30.39 — Buy Now") — real, well-formed
+prose (so it never trips the boilerplate check), but promotional rather than journalism. It flags a
+page whose body hits **2 or more** of: a discount percentage, a "was $X now $Y" price pattern, a
+buy-now/promo-code call to action, a "deal of the day"-style banner phrase, or an
+affiliate-commission disclosure — bilingual (English + Russian) since `sources.json` aggregates
+non-English feeds too. As a second line of defense for whatever slips past this regex heuristic, the
+summarization prompt itself (`summarize.ts`'s `buildSystemPrompt`) also asks the model to tag any
+deal/promo content it does end up summarizing with a `deals` tag, so the owner can still filter it
+out via the existing tag facets UI via the SPA's existing tag filter sidebar) even on a false
+negative.
+
 **Published date (`published_at`).** The card shows the source's original publication date (falling
 back to `added_at` — when the article entered this feed — when none is known; see
 `resolveCardDateIso` on the web side), while feed **sections** (Today/Yesterday/Earlier) always
