@@ -907,7 +907,7 @@ Plus `[vars]`, all optional:
   human-facing join link for a public channel. Only a well-formed `https://t.me/<name>` URL renders
   the banner — leave it unset to omit the banner entirely.
 - `PUBLISH_START_HOUR_UTC` / `PUBLISH_END_HOUR_UTC` (defaults `4` / `18`), `PUBLISH_ENABLED`
-  (default `true`), and `PUBLISH_MAX_PER_DAY` (default `10`) — see "Drip publishing (cron)" below.
+  (default `true`), and `PUBLISH_MAX_PER_DAY` (default `20`) — see "Drip publishing (cron)" below.
 
 ### Setup
 
@@ -1002,10 +1002,12 @@ message: title in bold, the TL;DR, the key-point bullets, a "Читать пол
 plain-text source line (just the domain, e.g. `Источник: example.com` — no link). The message
 therefore contains **exactly one** link, the ClipFeed card, so Telegram's own link-preview crawler
 builds its preview from that card instead of the original article. At most one article goes out per
-tick, so across the default 4–18 UTC window that's up to 14 posts a day — well under
-`PUBLISH_MAX_PER_DAY`'s default of 10, so the cap (see below) is what actually governs the daily
-total. An article is marked published the moment it's posted (or skipped — see below) so it's never
-sent twice, even across restarts or config changes.
+tick, so across the default 4–18 UTC window that's up to 14 posts a day — under
+`PUBLISH_MAX_PER_DAY`'s default of 20, so with the stock config it's actually the hourly window, not
+the cap (see below), that governs the daily total; the cap only starts to bind if you widen the
+window past 20 ticks or lower `PUBLISH_MAX_PER_DAY` yourself. An article is marked published the
+moment it's posted (or skipped — see below) so it's never sent twice, even across restarts or config
+changes.
 
 ### Immediate publish for manually-added articles
 
@@ -1016,41 +1018,46 @@ to make it wait in the same queue as agent-picked articles. The hook fires once,
 image stage (so a same-post photo upload is possible when an `og:image` was found — same
 `sendPhoto`/`sendMessage` logic as the drip queue itself, see above), for both a fresh pipeline run
 and a resummarize. It bypasses `PUBLISH_START_HOUR_UTC`/`PUBLISH_END_HOUR_UTC` (same precedent as
-the owner-only `/publish` command) but still respects `PUBLISH_MAX_PER_DAY` and the
-faithfulness-fail skip — a manual-add binge can't flood the channel any more than the drip could,
-and a likely- inaccurate summary still never gets posted. Articles added via the extension, the
-daily scraping agent, or Telegram's own URL-drop stay on the regular hourly drip; only `manual` gets
-the immediate post. If Telegram isn't configured, `PUBLISH_ENABLED` is `"false"`, or the send itself
-fails, the article still ends up `ready` as normal — a missing/misbehaving Telegram integration
-never blocks or fails an otherwise-successful add.
+the owner-only `/publish` command) **and, unlike the `/publish` command, is also exempt from
+`PUBLISH_MAX_PER_DAY`** — the owner explicitly chose to save and post this one article right now, so
+it's a separate, uncapped action rather than a slot drawn from the drip queue's daily budget: it
+never gets blocked by an already-exhausted cap, and sending it never counts against that cap for the
+rest of the day. It still respects the faithfulness-fail skip — a likely-inaccurate summary still
+never gets posted, cap or no cap. Articles added via the extension, the daily scraping agent, or
+Telegram's own URL-drop stay on the regular hourly drip (and its cap); only `manual` gets the
+immediate, uncapped post. If Telegram isn't configured, `PUBLISH_ENABLED` is `"false"`, or the send
+itself fails, the article still ends up `ready` as normal — a missing/misbehaving Telegram
+integration never blocks or fails an otherwise-successful add.
 
 ### Today-only selection and stale articles
 
 Task 37: the drip selects only articles added on the **current UTC calendar day** — not a rolling
-window. Owner decision: 10 posts/day (the cap, see below) is already more than enough for a full
-day's picks to fit inside "today", so freshness beats completeness. An article that doesn't get
-posted before the day ends is **not** carried over and published later — it stays visible in the
-feed like any other article, it just never goes out over Telegram. To stop the job re-scanning a
-growing backlog of old candidates on every tick, any such article is marked with a sentinel value in
-its existing `telegram_published_at` column (distinct from a real publish timestamp, but every
-reader of that column only ever checks NULL vs. NOT NULL, never parses it as a date — so reusing the
-column avoids a migration) the first tick after its day has passed, logged as
-`publish_skipped_stale
-{count}`. This sweep is idempotent: once marked, a row can never be
-reconsidered, so there's no re-looping.
+window. Owner decision: 20 posts/day (the cap, see below — in practice bounded to 14/day by the
+default hourly window anyway) is already more than enough for a full day's picks to fit inside
+"today", so freshness beats completeness. An article that doesn't get posted before the day ends is
+**not** carried over and published later — it stays visible in the feed like any other article, it
+just never goes out over Telegram. To stop the job re-scanning a growing backlog of old candidates
+on every tick, any such article is marked with a sentinel value in its existing
+`telegram_published_at` column (distinct from a real publish timestamp, but every reader of that
+column only ever checks NULL vs. NOT NULL, never parses it as a date — so reusing the column avoids
+a migration) the first tick after its day has passed, logged as `publish_skipped_stale
+{count}`.
+This sweep is idempotent: once marked, a row can never be reconsidered, so there's no re-looping.
 
 ### Daily post cap
 
-**`PUBLISH_MAX_PER_DAY`** ([vars] in `wrangler.toml`, default `10`) caps how many articles the drip
-actually sends per UTC day — a KV counter (`published:<YYYY-MM-DD>`, 48h TTL) increments on every
-real send and resets naturally at the next UTC day. This matters because the scraping agent can
-produce more than one batch in a day (see "Daily scraping agent" below and Task 36's run-level
-idempotency); without the cap, a second batch's worth of picks would otherwise all drip out on top
-of the first. Once the cap is hit, both the cron job and manual `/publish` no-op (logged as
-`publish_cap_reached`) rather than posting further — `/publish` replies with "Дневной лимит
-публикаций достигнут (N)" and, unlike `/scrape force`, has **no bypass**: the cap is a flood guard,
-not an inconvenience. A faithfulness-`'fail'` skip (see below) never counts against the cap and is
-never blocked by it, since it's never actually sent to Telegram.
+**`PUBLISH_MAX_PER_DAY`** ([vars] in `wrangler.toml`, default `20`) caps how many articles the
+**drip queue** actually sends per UTC day — a KV counter (`published:<YYYY-MM-DD>`, 48h TTL)
+increments on every real drip send and resets naturally at the next UTC day. This matters because
+the scraping agent can produce more than one batch in a day (see "Daily scraping agent" below and
+Task 36's run-level idempotency); without the cap, a second batch's worth of picks would otherwise
+all drip out on top of the first. Once the cap is hit, both the cron job and manual `/publish` no-op
+(logged as `publish_cap_reached`) rather than posting further — `/publish` replies with "Дневной
+лимит публикаций достигнут (N)" and, unlike `/scrape force`, has **no bypass**: the cap is a flood
+guard, not an inconvenience. A faithfulness-`'fail'` skip (see below) never counts against the cap
+and is never blocked by it, since it's never actually sent to Telegram. **Manually-added articles'
+immediate publish is exempt from this cap entirely** — see "Immediate publish for manually-added
+articles" above; it's a separate, owner-initiated action, not a slot the drip queue budgets for.
 
 ### Link previews (`GET /a/:id`)
 
@@ -1073,7 +1080,7 @@ broadcasts.
 stale sweep either); any other value, including leaving it unset, means "on" — same "only the
 literal false disables it" convention as `FAITHFULNESS_CHECK`.
 `PUBLISH_START_HOUR_UTC`/`PUBLISH_END_HOUR_UTC` and `PUBLISH_MAX_PER_DAY` are all `[vars]` strings
-parsed defensively (an invalid or missing value falls back to the documented default — `4`/`18`/`10`
+parsed defensively (an invalid or missing value falls back to the documented default — `4`/`18`/`20`
 respectively — with a logged warning) rather than disabling anything — the hour vars only bound the
 window and the cap only bounds the count, neither is an on/off switch itself. Always **UTC**,
 regardless of your own timezone. `deno task deploy` (and the CD workflow on merge to `main`) applies
