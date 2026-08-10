@@ -83,3 +83,71 @@ Deno.test("classifyArticleContent: reason names the title when flagged via the t
   const result = classifyArticleContent({ title: "Terms of Service", textContent: "" });
   assertEquals(result.reason?.includes("Terms of Service"), true);
 });
+
+Deno.test("classifyArticleContent: matchedMarkers/reason name which filter tripped (filterKey)", () => {
+  const boilerplate = classifyArticleContent({ title: "About Us", textContent: "" });
+  assertEquals(boilerplate.filterKey, "boilerplate");
+
+  const notFlagged = classifyArticleContent({ title: "Real news", textContent: "Ordinary body." });
+  assertEquals(notFlagged.filterKey, null);
+});
+
+// --- advertisement filter (Task 67) ---
+
+Deno.test("classifyArticleContent: a sponsored deal-roundup post (discount % + was/now price) is flagged as advertisement", () => {
+  // Reproduces the reported incident: a Tom's Hardware "TECH DEALS"
+  // affiliate post — real, well-formed prose (unlike the boilerplate case),
+  // so it must NOT trip via the boilerplate path.
+  const result = classifyArticleContent({
+    title: "Wolfbox MF60 Compressed Air Duster is 39% off — down to $30.39 instead of $49.99",
+    textContent:
+      "The Wolfbox MF60 Compressed Air Duster is a cordless PC cleaning tool with a motor spinning " +
+      "up to 110,000 RPM, and it's currently 39% off at Amazon, dropping the price from $49.99 down " +
+      "to $30.39. Buy Now while the deal lasts. As an Amazon Associate we may earn a commission from " +
+      "qualifying purchases made through links on this page.",
+  });
+  assertEquals(result.isNonArticle, true);
+  assertEquals(result.filterKey, "advertisement");
+  assertEquals(result.matchedMarkers.includes("discount_percent"), true);
+});
+
+Deno.test("classifyArticleContent: a Russian-language deal post is also flagged (bilingual markers)", () => {
+  const result = classifyArticleContent({
+    title: "Товар со скидкой",
+    textContent: "Устройство продаётся со скидкой 39%, цена снижена вместо $49.99 до $30.39. " +
+      "Активировать промокод можно на странице продавца.",
+  });
+  assertEquals(result.isNonArticle, true);
+  assertEquals(result.filterKey, "advertisement");
+});
+
+Deno.test("classifyArticleContent: exactly 1 advertisement-category hit does NOT trip the guard (stays conservative)", () => {
+  const result = classifyArticleContent({
+    title: "Company announces new pricing",
+    textContent:
+      "The company announced Tuesday that it is cutting the price of its flagship product by 20% " +
+      "starting next month, citing falling component costs across the industry.",
+  });
+  assertEquals(result.isNonArticle, false);
+});
+
+Deno.test("classifyArticleContent: ordinary pricing news mentioning a single discount in passing is not flagged", () => {
+  const result = classifyArticleContent({
+    title: "Retailer cuts prices ahead of holiday season",
+    textContent:
+      "A major retailer said Monday it would cut prices across thousands of items by up to 15% " +
+      "ahead of the holiday shopping season, in a bid to compete with online rivals. Analysts said " +
+      "the move reflects intensifying competition rather than a one-off promotion.",
+  });
+  assertEquals(result.isNonArticle, false);
+});
+
+Deno.test("classifyArticleContent: an affiliate disclosure alone (1 category) does not trip the guard", () => {
+  const result = classifyArticleContent({
+    title: "Best laptops of 2026",
+    textContent:
+      "We've tested dozens of laptops this year to find the best options for every budget. " +
+      "As an Amazon Associate we may earn a commission from qualifying purchases.",
+  });
+  assertEquals(result.isNonArticle, false);
+});

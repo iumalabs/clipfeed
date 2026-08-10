@@ -473,7 +473,11 @@ TAGS (tags): 2-4 lowercase topical nouns, Latin script only — broad categories
 space, music, programming, hardware, science, business), not narrow one-off phrases. Proper nouns are
 allowed (google, cloudflare), written as normally spelled in English. NEVER transliterate a
 non-English word into Latin letters, and NEVER produce two tags that name the same concept in
-different languages or forms.
+different languages or forms. If the source is primarily a sponsored product deal, discount roundup,
+or affiliate promotion rather than reporting (a discount percentage, a "was $X now $Y" price, a
+"buy now" call to action, or an affiliate-commission disclosure), include "deals" among the tags —
+this is a secondary signal, not a replacement for writing an accurate, faithful summary of the deal
+itself.
 
 lang_original: ISO 639-1 code of the source article's language.
 
