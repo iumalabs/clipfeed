@@ -18,6 +18,7 @@ const dict = {
   permanentReasonPaywalled: "страница закрыта платным доступом",
   permanentReasonUnfaithful: "пересказ не подтверждён источником",
   permanentReasonNotNews: "страница не похожа на новость (о компании, реклама и т.п.)",
+  permanentReasonBlocked: "источник заблокировал автоматический доступ (защита от ботов)",
   dailyLimitFailureLabel: "Дневной лимит выжимок исчерпан — обработается автоматически завтра",
 };
 

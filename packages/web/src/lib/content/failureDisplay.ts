@@ -29,6 +29,7 @@ export interface FailureDisplayDict {
   permanentReasonPaywalled: string;
   permanentReasonUnfaithful: string;
   permanentReasonNotNews: string;
+  permanentReasonBlocked: string;
   dailyLimitFailureLabel: string;
 }
 
@@ -48,6 +49,8 @@ function permanentReasonLabel(key: PermanentReasonKey, dict: FailureDisplayDict)
       return dict.permanentReasonUnfaithful;
     case "not_news":
       return dict.permanentReasonNotNews;
+    case "blocked":
+      return dict.permanentReasonBlocked;
   }
 }
 

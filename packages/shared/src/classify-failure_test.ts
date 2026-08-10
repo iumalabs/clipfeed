@@ -107,6 +107,10 @@ Deno.test("classifyFailure: fetch 402 (payment required) is permanent", () => {
   assertEquals(classifyFailure("internal: fetch: upstream responded 402").class, "permanent");
 });
 
+Deno.test("classifyFailure: fetch 400 (source blocked automated access) is permanent", () => {
+  assertEquals(classifyFailure("internal: fetch: upstream responded 400").class, "permanent");
+});
+
 Deno.test("classifyFailure: faithfulness enforce-mode discard is permanent", () => {
   assertEquals(
     classifyFailure("faithfulness: summary not supported by source").class,
@@ -155,6 +159,10 @@ Deno.test("classifyFailure: each permanent rule sets its own distinct reason key
     classifyFailure("extraction: not a news article (title matches a non-article page pattern)")
       .permanentReasonKey,
     "not_news",
+  );
+  assertEquals(
+    classifyFailure("internal: fetch: upstream responded 400").permanentReasonKey,
+    "blocked",
   );
 });
 
