@@ -18,12 +18,12 @@ SUMMARY_MODEL = "claude-haiku-4-5-20251001"
 DAILY_SUMMARY_LIMIT = 80
 WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 TURNSTILE_SITE_KEY = "0x4AAAAAAD5FSIrh2Xu_PuNh"
-PUBLIC_BASE_URL = "https://clipfeed.maksimyugai.com"
+PUBLIC_BASE_URL = "https://clipfeed.iuma.dev"
 # Shown as a GitHub icon link in the header and the footer's license link
 # (see GET /api/config, Header.tsx, Footer.tsx) — [vars] default "" (per the
 # forkability policy, never an owner-specific default), so both links are
 # simply hidden until you set this to your own fork's repo URL.
-REPO_URL = "https://github.com/maksimyugai/clipfeed"
+REPO_URL = "https://github.com/iumalabs/clipfeed"
 # Task 41 Part C: the task spec asked for 10 -> 6, but the recomputed worst
 # case (SUMMARIZE_CALL_TIMEOUT_MS x2 + JUDGE_CALL_TIMEOUT_MS x2 + fetch/embed/
 # image/extract overhead ~= 357s) leaves 6 minutes (360s) only ~3s of
