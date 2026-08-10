@@ -1195,8 +1195,19 @@ affiliate-commission disclosure — bilingual (English + Russian) since `sources
 non-English feeds too. As a second line of defense for whatever slips past this regex heuristic, the
 summarization prompt itself (`summarize.ts`'s `buildSystemPrompt`) also asks the model to tag any
 deal/promo content it does end up summarizing with a `deals` tag, so the owner can still filter it
-out via the existing tag facets UI via the SPA's existing tag filter sidebar) even on a false
-negative.
+out via the SPA's existing tag filter sidebar even on a false negative.
+
+**Descriptive fetch-blocked errors (`blocked`).** Some sites reject a plain server-side fetch
+outright with HTTP 400 and a generic client-rendered "Error" page — verified against
+`developer.meta.com`'s AI landing pages, which return this even to a real browser User-Agent; the
+block is keyed on missing cookies/JS-execution/browser fingerprint, not the request headers, so no
+header spoofing fixes it. Before CF-68 this fell through to `classifyFailure`'s `unknown` class and
+the card showed the raw, unhelpful `internal: fetch: upstream responded 400`. It's now its own
+`PermanentReasonKey` (`blocked`), shown as "источник заблокировал автоматический доступ (защита от
+ботов)" / "the source blocked automated access (bot/anti-scraping protection)" — same un-retryable
+reasoning as `paywalled`, just a distinct key so the owner isn't told a bot-blocked landing page is
+a subscription paywall. Feeds the auto-block learning below, same as
+`insufficient_text`/`paywalled`/ `not_news`.
 
 **Published date (`published_at`).** The card shows the source's original publication date (falling
 back to `added_at` — when the article entered this feed — when none is known; see
@@ -1420,11 +1431,12 @@ so neither can ever overwrite the other by construction (enforced as a standing 
 `curation_isolation_test.ts`).
 
 - Each pipeline failure classified by the existing `classifyFailure` (see "Self-healing failures"
-  below) scores its host: `insufficient_text`, `paywalled` (403/402), or `not_news` (an About/legal/
-  ad-info page that isn't news — see "Non-article page filter" above) → **+1**; **transient**
-  (5xx/timeouts) → **+0**, deliberately — an outage is evidence the upstream had a bad moment, not
-  that the domain itself is unusable, and scoring it would eventually auto-block any
-  flaky-but-otherwise-fine source given enough traffic.
+  below) scores its host: `insufficient_text`, `paywalled` (403/402), `not_news` (an About/legal/
+  ad-info page that isn't news — see "Non-article page filter" above), or `blocked` (400 — the
+  source rejected the fetch outright, typically a bot-detection gate — see "Descriptive
+  fetch-blocked errors" below) → **+1**; **transient** (5xx/timeouts) → **+0**, deliberately — an
+  outage is evidence the upstream had a bad moment, not that the domain itself is unusable, and
+  scoring it would eventually auto-block any flaky-but-otherwise-fine source given enough traffic.
 - Score reaching **`AUTOBLOCK_THRESHOLD`** ([vars], default `3`) writes/refreshes
   `autoblock:<domain>` = `{firstSeen, score, lastReason}`, TTL **`AUTOBLOCK_TTL_DAYS`** ([vars],
   default `60`, refreshed on every new signal) — expiry is automatic rehabilitation, no manual

@@ -26,7 +26,8 @@ export type PermanentReasonKey =
   | "ssrf_blocked"
   | "paywalled"
   | "unfaithful"
-  | "not_news";
+  | "not_news"
+  | "blocked";
 
 export interface FailureClassification {
   class: FailureClass;
@@ -123,6 +124,21 @@ const PERMANENT_RULES: { substring: string; reason: string; key: PermanentReason
     substring: "fetch: upstream responded 402",
     reason: "source page paywalled or forbidden",
     key: "paywalled",
+  },
+  // CF-68: developer.meta.com/ai/lp/muse-code/ (and other bot-gated
+  // marketing/landing pages) reject a plain server-side fetch with HTTP 400
+  // and a generic client-rendered "Error" app shell — no User-Agent spoof
+  // fixes this (verified against a real browser UA), since the block is
+  // keyed on missing cookies/JS-execution/browser fingerprint, not the
+  // headers we send. A distinct key from 'paywalled' since "paywalled"
+  // specifically implies a subscription gate, which would be a misleading
+  // thing to tell the owner about a landing page that's simply hostile to
+  // automated fetches — same un-retryable reasoning either way, though: a
+  // second fetch attempt gets the identical 400 every time.
+  {
+    substring: "fetch: upstream responded 400",
+    reason: "source blocked the request (bot/automation detection)",
+    key: "blocked",
   },
   { substring: "ssrf", reason: "url blocked by ssrf policy", key: "ssrf_blocked" },
   // FAITHFULNESS_ENFORCE's discard path (see faithfulness.ts) — a summary
