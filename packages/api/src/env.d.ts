@@ -249,9 +249,11 @@ declare global {
     // defaults to "true"; only the literal "false" turns the drip off.
     // Task 37: the drip now selects only today's (current UTC day's)
     // articles — see telegram-publish.ts's utcDayStartIso — and
-    // PUBLISH_MAX_PER_DAY (default 10, [vars] string) caps how many of those
+    // PUBLISH_MAX_PER_DAY (default 20, [vars] string) caps how many of those
     // are actually sent per UTC day, as a flood guard against the scraping
-    // agent producing more than one batch in a day (see Task 36).
+    // agent producing more than one batch in a day (see Task 36). A
+    // manually-added article's immediate publish (Task 66) is exempt from
+    // this cap — see telegram-publish.ts's publishArticleNow.
     TELEGRAM_CHANNEL_ID?: string;
     // Task 56: the public https://t.me/<name> link for humans to subscribe
     // — distinct from TELEGRAM_CHANNEL_ID above (the internal id the

@@ -138,9 +138,11 @@
 # HOUR_UTC/PUBLISH_END_HOUR_UTC (defaults 4/18) bound the daily publish
 # window in UTC; PUBLISH_ENABLED (default "true") is the on/off switch —
 # only the literal "false" disables it. The drip only ever selects the
-# current UTC day's articles; PUBLISH_MAX_PER_DAY (default 10) caps how many
+# current UTC day's articles; PUBLISH_MAX_PER_DAY (default 20) caps how many
 # are actually sent per UTC day, as a flood guard against the scraping agent
-# producing more than one batch in a day.
+# producing more than one batch in a day. A manually-added article's
+# immediate publish is exempt from this cap entirely — the owner explicitly
+# chose to post that one, so it neither waits on it nor eats into it.
 # TELEGRAM_CHANNEL_ID=
 # TELEGRAM_CHANNEL_URL: the public https://t.me/<name> link shown to
 # visitors as a "Subscribe on Telegram" banner (Sidebar.tsx/FilterSheet.tsx,
@@ -152,7 +154,7 @@
 # PUBLISH_START_HOUR_UTC=4
 # PUBLISH_END_HOUR_UTC=18
 # PUBLISH_ENABLED=true
-# PUBLISH_MAX_PER_DAY=10
+# PUBLISH_MAX_PER_DAY=20
 
 # Public origin of this deployed instance, e.g. https://example.com — used
 # only to build links in Telegram messages (the drip post's card link,

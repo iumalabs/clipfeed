@@ -474,8 +474,9 @@ async function runImageStage(
 // hourly drip tick — the owner explicitly chose to save this one right
 // now, so quiet hours (PUBLISH_START_HOUR_UTC/END) don't apply, same
 // precedent as the owner-only /publish command (see telegram-publish.ts's
-// doc comment); the daily cap (PUBLISH_MAX_PER_DAY) still does, same flood
-// guard as the drip queue. Placed AFTER runImageStage (not right after
+// doc comment); the daily cap (PUBLISH_MAX_PER_DAY) doesn't either — a
+// manual save is exempt from that budget entirely (see publishArticleNow's
+// own doc comment). Placed AFTER runImageStage (not right after
 // markArticleReady) so a same-post photo upload is possible instead of
 // always falling back to the no-image path. Every failure here is caught
 // and logged, never rethrown — like runEmbedStage/runImageStage above, a

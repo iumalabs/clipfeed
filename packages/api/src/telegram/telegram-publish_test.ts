@@ -668,7 +668,7 @@ Deno.test("publishNextArticle: increments the KV count only on a real send", asy
   }
 });
 
-Deno.test("publishNextArticle: at the default cap (10), the job no-ops with 'cap-reached' — article stays queued, no Telegram call", async () => {
+Deno.test("publishNextArticle: at the default cap (20), the job no-ops with 'cap-reached' — article stays queued, no Telegram call", async () => {
   const stub = stubTelegramFetch();
   try {
     const db = new FakeD1();
@@ -984,7 +984,7 @@ Deno.test("publishArticleNow: an unknown id is a safe no-op", async () => {
   }
 });
 
-Deno.test("publishArticleNow: still respects the daily cap — 'cap-reached', no Telegram call, article stays unpublished", async () => {
+Deno.test("publishArticleNow: exempt from the daily cap — still publishes and leaves the counter untouched", async () => {
   const stub = stubTelegramFetch();
   try {
     const db = new FakeD1();
@@ -993,11 +993,14 @@ Deno.test("publishArticleNow: still respects the daily cap — 'cap-reached', no
     await env.CACHE.put(publishCountKey(utcIso(NOW_MS)), String(DEFAULT_PUBLISH_MAX_PER_DAY));
 
     const outcome = await publishArticleNow(env, CONFIG, "target", NOW_MS);
-    assertEquals(outcome, { kind: "cap-reached", maxPerDay: DEFAULT_PUBLISH_MAX_PER_DAY });
-    assertEquals(stub.calls.length, 0);
+    assertEquals(outcome, { kind: "published", articleId: "target" });
+    assertEquals(stub.calls.length, 1);
 
     const row = db.rows.find((r) => r.id === "target")!;
-    assertEquals(row.telegram_published_at, null);
+    assertEquals(row.telegram_published_at, utcIso(NOW_MS));
+
+    const count = await env.CACHE.get(publishCountKey(utcIso(NOW_MS)));
+    assertEquals(count, String(DEFAULT_PUBLISH_MAX_PER_DAY));
   } finally {
     stub.restore();
   }

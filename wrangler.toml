@@ -62,7 +62,9 @@ AUTOBLOCK_TTL_DAYS = "60"
 # is the on/off switch (only the literal "false" disables it). The drip only
 # ever selects the current UTC day's articles (Task 37) — PUBLISH_MAX_PER_DAY
 # caps how many of those are actually sent per UTC day, as a flood guard
-# against the scraping agent producing more than one batch in a day.
+# against the scraping agent producing more than one batch in a day. A
+# manually-added article's immediate publish (Task 66) is exempt from this
+# cap entirely — see telegram-publish.ts's publishArticleNow doc comment.
 TELEGRAM_CHANNEL_ID = "@clipfeedchannel"
 # Task 56: the public https://t.me/<name> link for HUMANS to subscribe —
 # distinct from TELEGRAM_CHANNEL_ID above, which is the internal id the
@@ -75,7 +77,7 @@ TELEGRAM_CHANNEL_URL = "https://t.me/clipfeedchannel"
 PUBLISH_START_HOUR_UTC = "4"
 PUBLISH_END_HOUR_UTC = "18"
 PUBLISH_ENABLED = "true"
-PUBLISH_MAX_PER_DAY = "10"
+PUBLISH_MAX_PER_DAY = "20"
 # How many candidates the agent saves per run. String, parsed defensively
 # (1-20, else this default with a warning) — see README "Daily scraping
 # agent".

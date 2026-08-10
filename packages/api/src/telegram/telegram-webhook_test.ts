@@ -6,6 +6,7 @@ import { FakeQueue } from "../testing/fake_queue.ts";
 import type { TelegramMessage, TelegramUpdate } from "./telegram-client.ts";
 import { resetMissingTelegramSecretsWarningForTest } from "./telegram-webhook.ts";
 import { recordAgentRun } from "../agent/agent-run-tracker.ts";
+import { DEFAULT_PUBLISH_MAX_PER_DAY } from "./telegram-publish.ts";
 
 const OWNER_CHAT_ID = "999";
 const OTHER_CHAT_ID = "555";
@@ -829,13 +830,16 @@ Deno.test("webhook: /publish at the daily cap replies with the cap-reached messa
     const env = makeEnv();
     insertReadyArticleForPublish(env.DB as unknown as FakeD1, "p1");
     const today = new Date().toISOString().slice(0, 10);
-    await env.CACHE.put(`published:${today}`, "10");
+    await env.CACHE.put(`published:${today}`, String(DEFAULT_PUBLISH_MAX_PER_DAY));
     const { ctx } = makeExecutionContext();
 
     const res = await webhookRequest(env, ctx, messageUpdate({ text: "/publish" }));
     assertEquals(res.status, 200);
     assertEquals(stub.telegramCalls.length, 1); // only the reply, no post
-    assertEquals(stub.telegramCalls[0].body.text, "Дневной лимит публикаций достигнут (10).");
+    assertEquals(
+      stub.telegramCalls[0].body.text,
+      `Дневной лимит публикаций достигнут (${DEFAULT_PUBLISH_MAX_PER_DAY}).`,
+    );
 
     const row = (env.DB as unknown as FakeD1).rows.find((r) => r.id === "p1")!;
     assertEquals(row.telegram_published_at, null);

@@ -99,7 +99,7 @@ async function loadPublishablePhoto(
 // Task 37: publish ONLY today's articles. The drip used to draw from a
 // rolling 48h window, which meant a quiet stretch let yesterday's leftovers
 // crowd out today's picks before the reader ever saw them. Owner decision:
-// freshness beats completeness — 10 posts/day is already more than enough
+// freshness beats completeness — 20 posts/day is already more than enough
 // for a full day's picks to fit inside "today", so there's no need for a
 // wider window at all.
 export function utcDayStartIso(nowMs: number): string {
@@ -150,8 +150,11 @@ export function isPublishEnabled(raw: string | undefined): boolean {
 // Task 37 §3: flood guard against the agent producing more than one batch in
 // a day (see Task 36) — without a cap, a second batch's worth of picks would
 // otherwise all drip out on top of the first. Same defensive-parse
-// convention as the hour vars above.
-export const DEFAULT_PUBLISH_MAX_PER_DAY = 10;
+// convention as the hour vars above. Only governs the drip queue (agent
+// picks + anything else waiting its turn) — manually-added articles'
+// immediate publish (see publishArticleNow) is deliberately exempt, see its
+// own doc comment.
+export const DEFAULT_PUBLISH_MAX_PER_DAY = 20;
 
 function parsePublishMaxPerDay(raw: string | undefined): number {
   const trimmed = (raw ?? "").trim();
@@ -215,11 +218,18 @@ export type PublishOutcome =
 // still marked published so nothing retries the same skip forever. That
 // skip never touches the daily cap: it never reaches Telegram, so it can't
 // contribute to flooding the channel.
+//
+// countsAgainstCap=false (publishArticleNow's manual path) skips both the
+// cap check and the counter increment entirely — a manually-added article
+// is the owner explicitly choosing to post this one right now, not the
+// drip queue's automated flow, so it neither waits on nor eats into
+// PUBLISH_MAX_PER_DAY's budget for the rest of the day.
 async function publishCandidate(
   env: Env,
   config: TelegramConfig,
   candidate: PublishCandidate,
   nowMs: number,
+  countsAgainstCap: boolean = true,
 ): Promise<PublishOutcome> {
   const now = new Date(nowMs).toISOString();
 
@@ -231,11 +241,14 @@ async function publishCandidate(
     return { kind: "skipped-unfaithful", articleId: candidate.id };
   }
 
-  const maxPerDay = parsePublishMaxPerDay(env.PUBLISH_MAX_PER_DAY);
-  const countToday = await readPublishCountToday(env.CACHE, nowMs);
-  if (countToday >= maxPerDay) {
-    console.warn(JSON.stringify({ event: "publish_cap_reached", maxPerDay }));
-    return { kind: "cap-reached", maxPerDay };
+  let countToday = 0;
+  if (countsAgainstCap) {
+    const maxPerDay = parsePublishMaxPerDay(env.PUBLISH_MAX_PER_DAY);
+    countToday = await readPublishCountToday(env.CACHE, nowMs);
+    if (countToday >= maxPerDay) {
+      console.warn(JSON.stringify({ event: "publish_cap_reached", maxPerDay }));
+      return { kind: "cap-reached", maxPerDay };
+    }
   }
 
   const postInput = {
@@ -290,7 +303,9 @@ async function publishCandidate(
   }
 
   await markTelegramPublished(env.DB, candidate.id, now);
-  await incrementPublishCount(env.CACHE, nowMs, countToday);
+  if (countsAgainstCap) {
+    await incrementPublishCount(env.CACHE, nowMs, countToday);
+  }
   return { kind: "published", articleId: candidate.id };
 }
 
@@ -318,9 +333,11 @@ export async function publishNextArticle(
 // row just went ready. getPublishCandidateById's own WHERE guards (ready,
 // non-archived, telegram_published_at IS NULL) make this naturally
 // idempotent: a resummarize of an already-published article is a silent
-// {kind: "empty"} here, never a duplicate post. Same cap as the drip queue
-// — an immediate publish still counts against PUBLISH_MAX_PER_DAY, so a
-// manual-add binge can't flood the channel any more than the drip could.
+// {kind: "empty"} here, never a duplicate post. Deliberately exempt from
+// PUBLISH_MAX_PER_DAY (countsAgainstCap=false): the owner explicitly chose
+// to save and post this one article right now, so it neither gets blocked
+// by an already-exhausted drip cap nor eats into the budget the drip queue
+// needs for the rest of the day.
 export async function publishArticleNow(
   env: Env,
   config: TelegramConfig,
@@ -329,7 +346,7 @@ export async function publishArticleNow(
 ): Promise<PublishOutcome> {
   const candidate = await getPublishCandidateById(env.DB, articleId);
   if (!candidate) return { kind: "empty" };
-  return await publishCandidate(env, config, candidate, nowMs);
+  return await publishCandidate(env, config, candidate, nowMs, false);
 }
 
 // Called by the hourly cron (see scheduled.ts, which passes the tick's own
