@@ -570,6 +570,33 @@ function faithfulnessRows(): ArticleRow[] {
   ];
 }
 
+// --- Group 11: agent-batch indicator (owner-only aggregate progress UI) ---
+// Three 'agent' added_via rows, all pending and within WAVE_TOLERANCE_MS of
+// each other (see lib/feed/agentBatch.ts) so they're seen as one wave. Pinned
+// well into "earlier" like every other non-pagination group — the indicator
+// itself is section-agnostic (Feed.tsx computes it per-section over
+// whichever items landed there), so it renders under the Earlier section's
+// own header exactly like it would under Today in production. Each row's
+// eventual "ready" flip is driven by e2e/fixtures/db.ts's runSql mid-test
+// (same technique as pagination.spec.ts's poll-merge card), never a real
+// pipeline run.
+const AGENTBATCH_SOURCE = "e2e-agentbatch.example.com";
+export const AGENTBATCH_TAG = "e2e-agentbatch";
+export const AGENTBATCH_IDS = ["e2e-agentbatch-0", "e2e-agentbatch-1", "e2e-agentbatch-2"];
+
+function agentBatchRows(): ArticleRow[] {
+  return AGENTBATCH_IDS.map((id, i) => ({
+    id,
+    url: `https://${AGENTBATCH_SOURCE}/${i}`,
+    title: `Agent batch #${i}`,
+    source: AGENTBATCH_SOURCE,
+    added_at: isoMinutesAgo(5300 + i),
+    added_via: "agent",
+    status: "pending" as const,
+    tags: [AGENTBATCH_TAG],
+  }));
+}
+
 export function buildSeedSql(): string {
   const rows = [
     ...paginationRows(),
@@ -582,6 +609,7 @@ export function buildSeedSql(): string {
     ...facetsRows(),
     ...ownerActionsRows(),
     ...faithfulnessRows(),
+    ...agentBatchRows(),
   ];
   return [
     "DELETE FROM articles;",
