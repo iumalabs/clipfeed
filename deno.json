@@ -46,6 +46,12 @@
       ".wrangler-e2e/",
       "e2e/",
       "deno.lock",
+      // release-please regenerates this on every release PR (see
+      // release-please-config.json) — its own Markdown formatting doesn't
+      // match deno fmt's, and deno fmt --check has no way to "fix and
+      // leave alone", so CI failed on every release PR until this was
+      // excluded.
+      "CHANGELOG.md",
       "**/*.min.js",
       "**/*.min.css",
       "**/*.map"
