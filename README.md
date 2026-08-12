@@ -7,6 +7,11 @@
 
 # ClipFeed
 
+[![CI](https://github.com/iumalabs/clipfeed/actions/workflows/ci.yml/badge.svg)](https://github.com/iumalabs/clipfeed/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/iumalabs/clipfeed)](LICENSE)
+[![Open issues](https://img.shields.io/github/issues/iumalabs/clipfeed)](https://github.com/iumalabs/clipfeed/issues)
+[![Last commit](https://img.shields.io/github/last-commit/iumalabs/clipfeed)](https://github.com/iumalabs/clipfeed/commits/main)
+
 A personal article-digest web app. Save articles (via a Chrome extension, Telegram, or an automated
 agent); the backend extracts text and generates Russian + English AI summaries (Cloudflare Workers
 AI by default, or Claude via direct API or AI Gateway — see "LLM modes" below); a minimalist SPA
