@@ -94,14 +94,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      # gitleaks/gitleaks-action (the official wrapper) requires a paid
+      # GITLEAKS_LICENSE for any organization-owned repo — it started
+      # failing outright once this repo moved to the iumalabs org. Running
+      # the open-source gitleaks CLI directly (its own Docker image) has no
+      # such license gate in any context, and keeps this forkable per
+      # CLAUDE.md without asking every fork to register for a key. Same
+      # scan target as before: the full history of whatever ref is checked
+      # out (fetch-depth: 0 above), matching CLAUDE.md's "git-tracked
+      # content and git history" scope.
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          # Required so the action can call the GitHub API to resolve the PR's
-          # commit range; the default per-run token already has read access,
-          # no separate secret needed.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # No GITLEAKS_LICENSE needed — that's only required for private repos.
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            detect --source . -v --redact
 
   # Task 50: Playwright E2E suite (see e2e/, scripts/e2e/run.ts) — deliberately
   # ADVISORY (job-level continue-on-error), not blocking, unlike `check`
