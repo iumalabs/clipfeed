@@ -1,4 +1,5 @@
 import type { Dictionary } from "../i18n/i18n.ts";
+import { APP_VERSION } from "../lib/appVersion.ts";
 
 export interface FooterProps {
   dict: Dictionary;
@@ -23,6 +24,8 @@ export function Footer({ dict, repoUrl, telegramChannelUrl }: FooterProps) {
     <footer class="app-footer">
       <p class="app-footer-line">
         © {year} Maksim Yugai
+        <span class="app-footer-sep" aria-hidden="true">·</span>
+        v{APP_VERSION}
         <span class="app-footer-sep" aria-hidden="true">·</span>
         {licenseUrl
           ? <a href={licenseUrl} target="_blank" rel="noreferrer">{dict.footerLicenseLabel}</a>
