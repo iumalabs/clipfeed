@@ -1,4 +1,6 @@
+import { useState } from "preact/hooks";
 import type { Dictionary } from "../i18n/i18n.ts";
+import { DEFAULT_TOP_N, splitTopFacets } from "../lib/feed/facetDisclosure.ts";
 import { TelegramBanner } from "./TelegramBanner.tsx";
 
 export interface TagFacet {
@@ -145,22 +147,40 @@ export function Sidebar(
     telegramChannelUrl,
   }: SidebarProps,
 ) {
+  // Same "show top N, reveal the rest on demand" cap the mobile FilterSheet
+  // already uses — without it, a feed with many tags/sources turned the
+  // desktop sidebar into a very long scroll just to reach the article
+  // count/archive link below it.
+  const [tagsExpanded, setTagsExpanded] = useState(false);
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const tagsView = splitTopFacets(tags, DEFAULT_TOP_N, tagsExpanded);
+  const sourcesView = splitTopFacets(sources, DEFAULT_TOP_N, sourcesExpanded);
+
   return (
     <aside class="sidebar">
       <div class="sidebar-section">
         <TopicPills
           dict={dict}
-          tags={tags}
+          tags={tagsView.visible}
           activeTag={activeTag}
           onTagClick={onTagClick}
           onClearAll={onClearAll}
         />
+        {tagsView.hiddenCount > 0 && (
+          <button
+            type="button"
+            class="filter-sheet-showall"
+            onClick={() => setTagsExpanded(true)}
+          >
+            {dict.filtersShowAllLabel} ({tagsView.hiddenCount})
+          </button>
+        )}
       </div>
 
       <div class="sidebar-section">
         <h2 class="sidebar-heading">{dict.sidebarSourcesHeading}</h2>
         <ul class="source-list">
-          {sources.map(({ source, count }) => (
+          {sourcesView.visible.map(({ source, count }) => (
             <li key={source}>
               <button
                 type="button"
@@ -174,6 +194,15 @@ export function Sidebar(
             </li>
           ))}
         </ul>
+        {sourcesView.hiddenCount > 0 && (
+          <button
+            type="button"
+            class="filter-sheet-showall"
+            onClick={() => setSourcesExpanded(true)}
+          >
+            {dict.filtersShowAllLabel} ({sourcesView.hiddenCount})
+          </button>
+        )}
       </div>
 
       <div class="sidebar-section stat-card">
