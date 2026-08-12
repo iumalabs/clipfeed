@@ -25,6 +25,15 @@ async function buildApi(): Promise<void> {
 async function buildWeb(): Promise<void> {
   await Deno.mkdir("dist/web/fonts", { recursive: true });
   await Deno.mkdir("dist/web/docs-assets", { recursive: true });
+  // Footer shows this — see lib/appVersion.ts. Sourced from the manifest
+  // release-please itself maintains, so a version bump never needs a
+  // second manual edit anywhere in the app. Falls back to "0.0.0" rather
+  // than failing the build if the manifest is missing — e.g. a fork that
+  // hasn't set up release-please, or (locally) a branch checked out before
+  // it was first added to main.
+  const appVersion = await Deno.readTextFile(".release-please-manifest.json")
+    .then((raw) => JSON.parse(raw)["."] ?? "0.0.0")
+    .catch(() => "0.0.0");
   await esbuild.build({
     entryPoints: ["packages/web/src/main.tsx"],
     outdir: "dist/web",
@@ -40,6 +49,7 @@ async function buildWeb(): Promise<void> {
     // binding at runtime, not a bundle-relative import — external stops
     // esbuild from trying (and failing) to resolve it from disk.
     external: ["/fonts/*"],
+    define: { "__APP_VERSION__": JSON.stringify(appVersion) },
   });
   await Deno.copyFile("packages/web/index.html", "dist/web/index.html");
   for await (const entry of Deno.readDir("packages/web/fonts")) {

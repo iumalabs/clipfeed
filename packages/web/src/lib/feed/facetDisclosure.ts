@@ -10,6 +10,11 @@ export interface DisclosureResult<T> {
   hiddenCount: number;
 }
 
+// Shared cap for every tag/source pill list in the app (mobile FilterSheet
+// and the desktop Sidebar) — one number so the two surfaces can't drift out
+// of sync with each other.
+export const DEFAULT_TOP_N = 15;
+
 // `expanded` bypasses the cap entirely — the sheet's own "показать все" /
 // "show all" toggle just flips this rather than tracking a second, separate
 // list.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { Dictionary } from "../i18n/i18n.ts";
-import { filterFacetsByLabel, splitTopFacets } from "../lib/feed/facetDisclosure.ts";
+import { DEFAULT_TOP_N, filterFacetsByLabel, splitTopFacets } from "../lib/feed/facetDisclosure.ts";
 import {
   ActiveFilterChips,
   type SourceFacet,
@@ -13,7 +13,7 @@ import { TelegramBanner } from "./TelegramBanner.tsx";
 // Task 54: caps how many tag/source pills show before the sheet needs its
 // own "show all" — see facetDisclosure.ts's doc comment for why this exists
 // at all (avoiding recreating the "wall of pills" problem one tap deeper).
-const TOP_N = 15;
+const TOP_N = DEFAULT_TOP_N;
 
 // Swipe-down-to-dismiss threshold, in CSS px of vertical finger travel —
 // generous enough that an ordinary attempt to scroll the pill lists (a
