@@ -9,6 +9,38 @@ permissions:
   contents: read
 
 jobs:
+  # Feeds the e2e job's `if:` below — computes whether this push/PR touches
+  # anything the Playwright suite actually exercises (see scripts/e2e/run.ts:
+  # it boots the built api+web Worker against wrangler.toml/migrations, so
+  # "affects e2e" is effectively "affects the deployed app", not just e2e/
+  # itself). packages/extension is deliberately excluded — e2e never touches
+  # the Chrome extension (see e2e/tests/, none of it references extension
+  # code; that surface has its own release-extension.yml flow).
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      e2e: ${{ steps.filter.outputs.e2e }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Filter changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            e2e:
+              - 'e2e/**'
+              - 'packages/api/**'
+              - 'packages/web/**'
+              - 'packages/shared/**'
+              - 'migrations/**'
+              - 'scripts/build.ts'
+              - 'scripts/e2e/**'
+              - 'wrangler.toml'
+              - 'deno.json'
+              - 'deno.lock'
+
   check:
     runs-on: ubuntu-latest
     steps:
@@ -62,14 +94,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      # gitleaks/gitleaks-action (the official wrapper) requires a paid
+      # GITLEAKS_LICENSE for any organization-owned repo — it started
+      # failing outright once this repo moved to the iumalabs org. Running
+      # the open-source gitleaks CLI directly (its own Docker image) has no
+      # such license gate in any context, and keeps this forkable per
+      # CLAUDE.md without asking every fork to register for a key. Same
+      # scan target as before: the full history of whatever ref is checked
+      # out (fetch-depth: 0 above), matching CLAUDE.md's "git-tracked
+      # content and git history" scope.
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          # Required so the action can call the GitHub API to resolve the PR's
-          # commit range; the default per-run token already has read access,
-          # no separate secret needed.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # No GITLEAKS_LICENSE needed — that's only required for private repos.
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            detect --source . -v --redact
 
   # Task 50: Playwright E2E suite (see e2e/, scripts/e2e/run.ts) — deliberately
   # ADVISORY (job-level continue-on-error), not blocking, unlike `check`
@@ -80,14 +118,18 @@ jobs:
   # can't see) is exactly caught structurally and DETERMINISTICALLY by the
   # Part C contract tests instead, which already run in the blocking `check`
   # job above via the ordinary `deno task test` (no separate wiring needed —
-  # they're plain Deno tests). A flaky E2E failure blocking every PR
-  # (including ones that never touch the SPA) would violate this suite's own
-  # design goal of never gating a code-unrelated merge. This is marked
-  # advisory-with-visible-status: a run still appears on the PR (so a real
-  # regression is never silent), it just can't block the merge on its own —
-  # revisit this once the suite has a track record of not flaking in this
-  # CI environment.
+  # they're plain Deno tests). This is marked advisory-with-visible-status: a
+  # relevant run still appears on the PR (so a real regression is never
+  # silent), it just can't block the merge on its own — revisit this once the
+  # suite has a track record of not flaking in this CI environment.
+  #
+  # Also gated on the `changes` job above: skipped entirely (not just
+  # advisory) when nothing e2e-relevant changed — a README/docs-only PR
+  # shouldn't pay for a Chromium download and a full app boot just to run a
+  # suite that couldn't have caught anything in that diff.
   e2e:
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
     permissions:

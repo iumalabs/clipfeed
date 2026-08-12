@@ -1,0 +1,29 @@
+name: Release Please
+
+# Separate from ci.yml on purpose, same as release-extension.yml: this only
+# runs on push to main and only opens/updates a release PR (or cuts a
+# GitHub Release + tag once that PR is merged) — it never affects the
+# blocking `check` job's status.
+#
+# release-type "simple" (see release-please-config.json) manages
+# CHANGELOG.md and the git tag/GitHub Release only — there's no root
+# package.json/deno.json "version" field in this repo for it to bump.
+# .release-please-manifest.json seeds the starting version at 1.0.0; this
+# workflow computes and proposes the NEXT version (from Conventional
+# Commits merged after that baseline), it doesn't publish 1.0.0 itself.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
