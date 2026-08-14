@@ -13,15 +13,25 @@
 // up in the wild — a sponsored product-deal roundup ("39% off, buy now")
 // that reads as real prose (so the boilerplate marker count never trips)
 // but still isn't the kind of news article this feed exists to summarize.
-// Adding a THIRD kind of non-article page (a paywalled-teaser page, a
-// listicle-of-links page, whatever shows up next) is meant to be a single
-// new entry in CONTENT_FILTERS below, not a change to classifyArticleContent
-// itself, pipeline.ts's call site, or classify-failure.ts — every filter's
-// hit is wrapped in the SAME "extraction: not a news article (...)" prefix
-// (see pipeline.ts), which classify-failure.ts already maps to the single
+// Adding a new kind of non-article page whose signature fits the existing
+// title-pattern / body-marker-count shape is meant to be a single new entry
+// in CONTENT_FILTERS below, not a change to classifyArticleContent itself,
+// pipeline.ts's call site, or classify-failure.ts — every filter's hit is
+// wrapped in the SAME "extraction: not a news article (...)" prefix (see
+// pipeline.ts), which classify-failure.ts already maps to the single
 // "not_news" PermanentReasonKey, and the SPA's existing not_news copy
 // already reads "the page doesn't look like news (about/ads/legal page)" —
 // written broadly enough up front to cover exactly this kind of addition.
+//
+// The buying-guide check below (multi-product roundups, "Best X 2026"
+// listicles) is the one exception to "just add a CONTENT_FILTERS entry" —
+// its signal-counting logic (detectBuyingGuideSignals) is shared with a
+// SECOND layer downstream (pipeline.ts's post-summary gate, run on the
+// finished summary rather than the raw page), so it lives in its own module
+// and is called explicitly below instead of being expressed as
+// titlePatterns/bodyMarkers.
+import { detectBuyingGuideSignals } from "./buying-guide-signals.ts";
+
 export interface ArticleClassification {
   isNonArticle: boolean;
   matchedMarkers: string[];
@@ -171,6 +181,23 @@ export function classifyArticleContent(
         partialMatch = matchedMarkers;
       }
     }
+  }
+
+  // Buying-guide / product-roundup check (see buying-guide-signals.ts for
+  // why this isn't just another CONTENT_FILTERS entry) — same
+  // "not a news article" wrapping and filterKey convention as the loop
+  // above, so classify-failure.ts/pipeline.ts need no changes to handle it.
+  const buyingGuide = detectBuyingGuideSignals(title, extracted.textContent);
+  if (buyingGuide.isBuyingGuide) {
+    return {
+      isNonArticle: true,
+      matchedMarkers: buyingGuide.matchedSignals,
+      reason: `buying_guide signals: ${buyingGuide.matchedSignals.join(", ")}`,
+      filterKey: "buying_guide",
+    };
+  }
+  if (buyingGuide.matchedSignals.length > 0 && partialMatch.length === 0) {
+    partialMatch = buyingGuide.matchedSignals;
   }
 
   return { isNonArticle: false, matchedMarkers: partialMatch, reason: null, filterKey: null };

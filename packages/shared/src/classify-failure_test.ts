@@ -128,6 +128,14 @@ Deno.test("classifyFailure: not-a-news-article extraction is permanent", () => {
   );
 });
 
+Deno.test("classifyFailure: not-a-news-article post-summary buying-guide gate is permanent", () => {
+  const result = classifyFailure(
+    "summarize: not a news article (buying_guide signals: multi_product_pricing, ranking_language)",
+  );
+  assertEquals(result.class, "permanent");
+  assertEquals(result.permanentReasonKey, "not_news");
+});
+
 // --- permanentReasonKey (SPA localization signal) ---
 
 Deno.test("classifyFailure: each permanent rule sets its own distinct reason key", () => {
@@ -157,6 +165,11 @@ Deno.test("classifyFailure: each permanent rule sets its own distinct reason key
   );
   assertEquals(
     classifyFailure("extraction: not a news article (title matches a non-article page pattern)")
+      .permanentReasonKey,
+    "not_news",
+  );
+  assertEquals(
+    classifyFailure("summarize: not a news article (buying_guide signals: buy_cta)")
       .permanentReasonKey,
     "not_news",
   );

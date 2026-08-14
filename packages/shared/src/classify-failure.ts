@@ -106,6 +106,19 @@ const PERMANENT_RULES: { substring: string; reason: string; key: PermanentReason
     reason: "page reads as boilerplate (about/legal/ad-info), not a news article",
     key: "not_news",
   },
+  // The same buying-guide/product-roundup signals (see
+  // pipeline/buying-guide-signals.ts) checked a second time against the
+  // FINISHED summary, as a safety net for whatever the pre-LLM
+  // article-classifier.ts pass above didn't catch on the raw page (e.g. the
+  // source's ranking language only became explicit once the model
+  // paraphrased it). Same un-retryable reasoning and the same "not_news" key
+  // — a resummarize would just reproduce the same buying-guide summary from
+  // the same buying-guide source.
+  {
+    substring: "summarize: not a news article",
+    reason: "summary reads as a buying guide/product roundup, not news",
+    key: "not_news",
+  },
   { substring: "fetch: upstream responded 404", reason: "source page not found", key: "not_found" },
   {
     substring: "fetch: upstream responded 410",
