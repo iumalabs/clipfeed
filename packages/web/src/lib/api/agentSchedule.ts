@@ -1,5 +1,6 @@
-// Task 24 Part D: powers the empty-Today countdown ("new articles in
-// Xh Ym"). agent_hour_utc is a UTC hour (0-23) or null (agent disabled) —
+// Task 24 Part D (extended for the two-runs-a-day schedule): powers the
+// empty-Today countdown ("new articles in Xh Ym"). agent_hour_utc/
+// agent_hour_utc_2 are each a UTC hour (0-23) or null (that run disabled) —
 // see GET /api/config in packages/api/src/index.ts.
 //
 // All arithmetic below works in absolute epoch milliseconds (Date.UTC /
@@ -11,7 +12,7 @@
 // calendar day and genuinely needs that care). The result naturally renders
 // correctly in the visitor's own local clock once formatted, without this
 // module needing to know what timezone they're in.
-export function nextAgentRunMs(hourUtc: number, now: Date): number {
+function nextRunMsForHour(hourUtc: number, now: Date): number {
   const candidate = new Date(Date.UTC(
     now.getUTCFullYear(),
     now.getUTCMonth(),
@@ -25,6 +26,13 @@ export function nextAgentRunMs(hourUtc: number, now: Date): number {
     candidate.setUTCDate(candidate.getUTCDate() + 1);
   }
   return candidate.getTime();
+}
+
+// Earliest next occurrence across every configured hour (one or two —
+// agentHourUtc/agentHourUtc2, whichever aren't null). Callers only call
+// this once at least one hour is configured (see TodayEmptyState.tsx).
+export function nextAgentRunMs(hoursUtc: number[], now: Date): number {
+  return Math.min(...hoursUtc.map((hour) => nextRunMsForHour(hour, now)));
 }
 
 export interface Countdown {
@@ -59,18 +67,20 @@ import { loadRawConfig } from "./config.ts";
 
 export interface AgentScheduleConfig {
   agentHourUtc: number | null;
+  agentHourUtc2: number | null;
   agentDailyPicks: number;
 }
 
 const DEFAULT_AGENT_DAILY_PICKS = 10;
 
 // Reads its slice of the single shared GET /api/config fetch (see
-// lib/api/config.ts) — a fetch failure degrades to "disabled" (null hour), never
-// blocks rendering the empty-Today state.
+// lib/api/config.ts) — a fetch failure degrades to "disabled" (both hours
+// null), never blocks rendering the empty-Today state.
 export async function loadAgentSchedule(): Promise<AgentScheduleConfig> {
   const body = await loadRawConfig();
   return {
     agentHourUtc: typeof body.agent_hour_utc === "number" ? body.agent_hour_utc : null,
+    agentHourUtc2: typeof body.agent_hour_utc_2 === "number" ? body.agent_hour_utc_2 : null,
     agentDailyPicks: typeof body.agent_daily_picks === "number"
       ? body.agent_daily_picks
       : DEFAULT_AGENT_DAILY_PICKS,

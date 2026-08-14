@@ -62,11 +62,14 @@
 # packages/api/sources.json, not here). INTEREST_TOPICS steers the ranking
 # call's taste — free text, edit to match what you actually want surfaced.
 # AGENT_HOUR_UTC is a UTC hour (0-23); clearing it to an empty string
-# disables the job. AGENT_DAILY_PICKS is how many candidates the agent
-# saves per run — valid range 1-20, anything missing/invalid falls back to
-# 20.
+# disables the job. AGENT_HOUR_UTC_2 is an optional second run at another
+# UTC hour, same format/empty-disables convention — leave unset for a
+# single run a day. AGENT_DAILY_PICKS is how many candidates the agent
+# saves per run (not per day even with two runs configured) — valid range
+# 1-20, anything missing/invalid falls back to 20.
 # INTEREST_TOPICS=AI/LLMs and their engineering; computer hardware — CPUs, GPUs, NVIDIA/Intel/AMD, chips; Linux — kernel, distributions, open source ecosystem; software development and programming languages; Cloudflare and edge computing; security — vulnerabilities, breaches, exploits, threat research; notable science/tech news
 # AGENT_HOUR_UTC=5
+# AGENT_HOUR_UTC_2=17
 # AGENT_DAILY_PICKS=20
 
 # Curated variety (see README "Curated variety"): topic quotas, priority

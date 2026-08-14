@@ -108,18 +108,21 @@ const app = new Hono<AppEnv>();
 // dormant in case a public interaction (e.g. "suggest a link") shows up
 // later.
 //
-// agent_hour_utc/agent_daily_picks (Task 24 Part D): exposed so the SPA can
-// render a live "new articles in Xh Ym" countdown when today's section is
-// empty, computed client-side from the browser's own local timezone (see
-// packages/web/src/lib/api/agentSchedule.ts) — same parseHour() the scheduled
-// dispatcher itself uses, so "disabled" here means exactly the same thing
-// it means for the cron (an empty/invalid AGENT_HOUR_UTC), never null vs.
-// some other silently-different definition of "off".
+// agent_hour_utc/agent_hour_utc_2/agent_daily_picks (Task 24 Part D, extended
+// for the two-runs-a-day schedule): exposed so the SPA can render a live
+// "new articles in Xh Ym" countdown when today's section is empty, computed
+// client-side from the browser's own local timezone against whichever of
+// the two hours comes next (see packages/web/src/lib/api/agentSchedule.ts)
+// — same parseHour() the scheduled dispatcher itself uses, so "disabled"
+// here means exactly the same thing it means for the cron (an empty/invalid
+// AGENT_HOUR_UTC/AGENT_HOUR_UTC_2), never null vs. some other
+// silently-different definition of "off".
 app.get("/api/config", (c) => {
   const config = readTurnstileConfig(c.env);
   return c.json({
     turnstile_site_key: config?.siteKey ?? null,
     agent_hour_utc: parseHour(c.env.AGENT_HOUR_UTC),
+    agent_hour_utc_2: parseHour(c.env.AGENT_HOUR_UTC_2 ?? ""),
     agent_daily_picks: parseAgentDailyPicks(c.env.AGENT_DAILY_PICKS),
     // Task 30 Part D: single source of truth for the header's GitHub icon
     // link and the footer's license link (see repoConfig.ts) — "" when

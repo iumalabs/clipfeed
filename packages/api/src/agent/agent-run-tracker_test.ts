@@ -3,6 +3,7 @@ import { assertEquals } from "@std/assert";
 import {
   type AgentRunRecord,
   formatUtcHourMinute,
+  hasRunAtHourToday,
   hasRunToday,
   readAgentRunHistory,
   recordAgentRun,
@@ -102,6 +103,34 @@ Deno.test("recordAgentRun: a run on a different UTC date writes a separate key, 
   await recordAgentRun(cache, RECORD_2, day2);
   assertEquals(await readAgentRunHistory(cache, DAY1), [RECORD_1]);
   assertEquals(await readAgentRunHistory(cache, day2), [RECORD_2]);
+});
+
+// --- hasRunAtHourToday ---
+
+Deno.test("hasRunAtHourToday: false when nothing has run today", async () => {
+  const cache = new FakeKV() as unknown as KVNamespace;
+  assertEquals(await hasRunAtHourToday(cache, 5, DAY1), false);
+});
+
+Deno.test("hasRunAtHourToday: true for the hour a recorded run's startedAt falls in", async () => {
+  const cache = new FakeKV() as unknown as KVNamespace;
+  await recordAgentRun(cache, RECORD_1, DAY1); // startedAt hour 5
+  assertEquals(await hasRunAtHourToday(cache, 5, DAY1), true);
+});
+
+Deno.test("hasRunAtHourToday: false for a different hour than any recorded run", async () => {
+  const cache = new FakeKV() as unknown as KVNamespace;
+  await recordAgentRun(cache, RECORD_1, DAY1); // startedAt hour 5
+  assertEquals(await hasRunAtHourToday(cache, 17, DAY1), false);
+});
+
+Deno.test("hasRunAtHourToday: two runs at different hours are each recognized independently", async () => {
+  const cache = new FakeKV() as unknown as KVNamespace;
+  await recordAgentRun(cache, RECORD_1, DAY1); // startedAt hour 5
+  await recordAgentRun(cache, RECORD_2, DAY1); // startedAt hour 8
+  assertEquals(await hasRunAtHourToday(cache, 5, DAY1), true);
+  assertEquals(await hasRunAtHourToday(cache, 8, DAY1), true);
+  assertEquals(await hasRunAtHourToday(cache, 17, DAY1), false);
 });
 
 Deno.test("recordAgentRun: history is capped at 5, oldest dropped first", async () => {

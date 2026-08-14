@@ -764,13 +764,13 @@ the forkability policy new changes must follow.
 Note the daily scraping agent (see "Daily scraping agent" below) runs **on by default** once
 deployed — it uses the committed `packages/api/sources.json` list, `INTEREST_TOPICS` default, and
 the curated-variety config (`packages/api/curation.json`/`blocklist.json`, all fork-editable, no
-`[vars]` needed for any of it — see "Curated variety" below), and fires daily via the hourly cron
-(`AGENT_HOUR_UTC`, default `5`). Clear `AGENT_HOUR_UTC` to `""` if you'd rather opt in later once
-Access/LLM mode are set up the way you want.
+`[vars]` needed for any of it — see "Curated variety" below), and fires twice a day via the
+30-minute cron (`AGENT_HOUR_UTC`/`AGENT_HOUR_UTC_2`, defaults `5`/`17`). Clear either (or both) to
+`""` if you'd rather opt in later once Access/LLM mode are set up the way you want.
 
 Two more optional pieces, once the above is working: "Protecting your instance" below (required
 before real use — reads are public by design, but writes need this) and "Telegram bot" further down
-(an optional capture path + hourly drip publishing, off by default).
+(an optional capture path + drip publishing every 30 minutes, off by default).
 
 ## Protecting your instance
 
@@ -863,15 +863,15 @@ with no secret, is inert — `readTurnstileConfig()` requires both).
 
 ## Telegram bot
 
-Optional capture path + hourly drip publishing, entirely separate from the extension/SPA. Send the
-bot a link and it saves the article the same way the web UI does. Instead of a once-daily
-wall-of-text digest, ClipFeed publishes **one standalone post per hour** — title, TL;DR, key points,
+Optional capture path + drip publishing every 30 minutes, entirely separate from the extension/SPA.
+Send the bot a link and it saves the article the same way the web UI does. Instead of a once-daily
+wall-of-text digest, ClipFeed publishes **one standalone post per tick** — title, TL;DR, key points,
 and a link to the full card — during a configurable daily window (see "Drip publishing (cron)"
 below); `/publish` forces the next queued article out immediately instead of waiting for the next
 tick, and `/digest` still exists for an on-demand plain-text summary of the last 24h if you want
 one. `/scrape` runs the daily scraping agent (see "Daily scraping agent" below) on demand instead of
-waiting for its own cron hour. The bot only ever acts on messages from your own chat — every other
-chat gets a one-line refusal and nothing else happens.
+waiting for its own cron hour(s). The bot only ever acts on messages from your own chat — every
+other chat gets a one-line refusal and nothing else happens.
 
 ### How auth works here (read this before wiring it up)
 
@@ -964,8 +964,8 @@ works before you've set anything else up. To publish to a channel instead:
    [@userinfobot](https://t.me/userinfobot) to get it). Either a `[vars]` entry in `wrangler.toml`
    or a secret works; it isn't sensitive.
 
-Once set, both the hourly drip and `/publish` post there instead of your DM. Clear it back to `""`
-to revert to DMs.
+Once set, both the drip and `/publish` post there instead of your DM. Clear it back to `""` to
+revert to DMs.
 
 **Finding your chat id:** message your bot at least once (anything — even just `/start`), then run:
 
@@ -987,13 +987,13 @@ deno task telegram:setup                    # re-registers the webhook once you 
 
 ### Drip publishing (cron)
 
-`wrangler.toml`'s `[triggers]` section runs a single **hourly** cron. The scraping agent (see "Daily
-scraping agent" below) dispatches once at `AGENT_HOUR_UTC`; the drip publish job runs on **every**
-tick instead of a single hour, gated by its own window:
+`wrangler.toml`'s `[triggers]` section runs a single cron **every 30 minutes**. The scraping agent
+(see "Daily scraping agent" below) dispatches once at each of `AGENT_HOUR_UTC`/`AGENT_HOUR_UTC_2`;
+the drip publish job runs on **every** tick instead of specific hours, gated by its own window:
 
 ```
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/30 * * * *"]
 ```
 
 On every enabled tick (window or not — see below), ClipFeed first sweeps: any `ready`, non-archived,
@@ -1007,20 +1007,19 @@ message: title in bold, the TL;DR, the key-point bullets, a "Читать пол
 plain-text source line (just the domain, e.g. `Источник: example.com` — no link). The message
 therefore contains **exactly one** link, the ClipFeed card, so Telegram's own link-preview crawler
 builds its preview from that card instead of the original article. At most one article goes out per
-tick, so across the default 4–18 UTC window that's up to 14 posts a day — under
-`PUBLISH_MAX_PER_DAY`'s default of 20, so with the stock config it's actually the hourly window, not
-the cap (see below), that governs the daily total; the cap only starts to bind if you widen the
-window past 20 ticks or lower `PUBLISH_MAX_PER_DAY` yourself. An article is marked published the
-moment it's posted (or skipped — see below) so it's never sent twice, even across restarts or config
-changes.
+tick, so across the default 2–18 UTC window (16 hours × 2 ticks/hour) that's up to 32 posts a day by
+window alone — with the stock config it's actually `PUBLISH_MAX_PER_DAY`'s default of `25` (see
+below) that governs the daily total, not the window; the window only starts to bind on its own if
+you lower it below `PUBLISH_MAX_PER_DAY` ticks. An article is marked published the moment it's
+posted (or skipped — see below) so it's never sent twice, even across restarts or config changes.
 
 ### Immediate publish for manually-added articles
 
 Task 66: an article added through the SPA's "Add" modal (`added_via: "manual"`) posts to the
 Telegram channel **immediately** once its pipeline run reaches `ready`, instead of waiting for the
-next hourly drip tick — the owner explicitly chose to save this one right now, so there's no reason
-to make it wait in the same queue as agent-picked articles. The hook fires once, right after the
-image stage (so a same-post photo upload is possible when an `og:image` was found — same
+next drip tick — the owner explicitly chose to save this one right now, so there's no reason to make
+it wait in the same queue as agent-picked articles. The hook fires once, right after the image stage
+(so a same-post photo upload is possible when an `og:image` was found — same
 `sendPhoto`/`sendMessage` logic as the drip queue itself, see above), for both a fresh pipeline run
 and a resummarize. It bypasses `PUBLISH_START_HOUR_UTC`/`PUBLISH_END_HOUR_UTC` (same precedent as
 the owner-only `/publish` command) **and, unlike the `/publish` command, is also exempt from
@@ -1029,29 +1028,30 @@ it's a separate, uncapped action rather than a slot drawn from the drip queue's 
 never gets blocked by an already-exhausted cap, and sending it never counts against that cap for the
 rest of the day. It still respects the faithfulness-fail skip — a likely-inaccurate summary still
 never gets posted, cap or no cap. Articles added via the extension, the daily scraping agent, or
-Telegram's own URL-drop stay on the regular hourly drip (and its cap); only `manual` gets the
-immediate, uncapped post. If Telegram isn't configured, `PUBLISH_ENABLED` is `"false"`, or the send
-itself fails, the article still ends up `ready` as normal — a missing/misbehaving Telegram
-integration never blocks or fails an otherwise-successful add.
+Telegram's own URL-drop stay on the regular drip (and its cap); only `manual` gets the immediate,
+uncapped post. If Telegram isn't configured, `PUBLISH_ENABLED` is `"false"`, or the send itself
+fails, the article still ends up `ready` as normal — a missing/misbehaving Telegram integration
+never blocks or fails an otherwise-successful add.
 
 ### Today-only selection and stale articles
 
 Task 37: the drip selects only articles added on the **current UTC calendar day** — not a rolling
-window. Owner decision: 20 posts/day (the cap, see below — in practice bounded to 14/day by the
-default hourly window anyway) is already more than enough for a full day's picks to fit inside
-"today", so freshness beats completeness. An article that doesn't get posted before the day ends is
-**not** carried over and published later — it stays visible in the feed like any other article, it
-just never goes out over Telegram. To stop the job re-scanning a growing backlog of old candidates
-on every tick, any such article is marked with a sentinel value in its existing
-`telegram_published_at` column (distinct from a real publish timestamp, but every reader of that
-column only ever checks NULL vs. NOT NULL, never parses it as a date — so reusing the column avoids
-a migration) the first tick after its day has passed, logged as `publish_skipped_stale
-{count}`.
-This sweep is idempotent: once marked, a row can never be reconsidered, so there's no re-looping.
+window. Owner decision: `PUBLISH_MAX_PER_DAY` posts/day (the cap, see below — 25 by default, and now
+the actual binding limit rather than the window, see "Drip publishing (cron)" above) is already more
+than enough for a full day's picks to fit inside "today", so freshness beats completeness. An
+article that doesn't get posted before the day ends is **not** carried over and published later — it
+stays visible in the feed like any other article, it just never goes out over Telegram. To stop the
+job re-scanning a growing backlog of old candidates on every tick, any such article is marked with a
+sentinel value in its existing `telegram_published_at` column (distinct from a real publish
+timestamp, but every reader of that column only ever checks NULL vs. NOT NULL, never parses it as a
+date — so reusing the column avoids a migration) the first tick after its day has passed, logged as
+`publish_skipped_stale
+{count}`. This sweep is idempotent: once marked, a row can never be
+reconsidered, so there's no re-looping.
 
 ### Daily post cap
 
-**`PUBLISH_MAX_PER_DAY`** ([vars] in `wrangler.toml`, default `20`) caps how many articles the
+**`PUBLISH_MAX_PER_DAY`** ([vars] in `wrangler.toml`, default `25`) caps how many articles the
 **drip queue** actually sends per UTC day — a KV counter (`published:<YYYY-MM-DD>`, 48h TTL)
 increments on every real drip send and resets naturally at the next UTC day. This matters because
 the scraping agent can produce more than one batch in a day (see "Daily scraping agent" below and
@@ -1101,18 +1101,21 @@ extract → summarize → persist pipeline as every other capture path (includin
 
 ## Daily scraping agent
 
-Once a day, the agent reads a small set of trusted sources, ranks the last 24h of candidates against
-your interests with one cheap LLM call, and runs the top `AGENT_DAILY_PICKS` (default `20`) through
-the normal extract → summarize → persist pipeline — same as any other capture path, just
-self-initiated (`added_via: "agent"`). The SPA already highlights the newest agent-added article
-from today with a "pick of the day" badge; no separate review step exists — a pick that turns out
-uninteresting is just another card you can archive.
+Once or twice a day (see "Schedule and manual trigger" below), the agent reads a small set of
+trusted sources, ranks the last 24h of candidates against your interests with one cheap LLM call,
+and runs the top `AGENT_DAILY_PICKS` through the normal extract → summarize → persist pipeline —
+same as any other capture path, just self-initiated (`added_via: "agent"`). The SPA already
+highlights the newest agent-added article from today with a "pick of the day" badge; no separate
+review step exists — a pick that turns out uninteresting is just another card you can archive.
 
-**`AGENT_DAILY_PICKS`** ([vars] in `wrangler.toml`, default `20`, valid range `1`–`20`) is how many
-candidates the agent saves per run — a bad override (missing, non-numeric, out of range) falls back
-to `20` with a logged warning, same defensive-parse pattern as `SUMMARY_BODY_TARGET_CHARS`. Raising
-it increases how many summarization slots the agent itself spends every day — see "Self-healing
-failures" below for the `DAILY_SUMMARY_LIMIT` budget arithmetic this feeds into.
+**`AGENT_DAILY_PICKS`** ([vars] in `wrangler.toml`, shipped default `15`, valid range `1`–`20`, code
+fallback `20` if unset/invalid) is how many candidates the agent saves **per run**, not per day — a
+bad override (missing, non-numeric, out of range) falls back to `20` with a logged warning, same
+defensive-parse pattern as `SUMMARY_BODY_TARGET_CHARS`. With the stock config that's up to
+`15 × 2 =
+30` picks on a day both `AGENT_HOUR_UTC` and `AGENT_HOUR_UTC_2` fire. Raising it increases
+how many summarization slots the agent itself spends every run — see "Self-healing failures" below
+for the `DAILY_SUMMARY_LIMIT` budget arithmetic this feeds into.
 
 ### Sources (`packages/api/sources.json`)
 
@@ -1154,7 +1157,7 @@ That static list isn't the only filter, though — the pool-building stage also 
 blocklist in KV (see `thin-host-learning.ts`): any host that produces 2+
 `'extraction: insufficient
 text'` failures within a rolling 30-day window is filtered automatically,
-no code change needed. This is populated both by fresh pipeline failures and by the hourly
+no code change needed. This is populated both by fresh pipeline failures and by the 30-minute
 self-healing sweep re-classifying older rows (see "Self-healing failures" below) — it only ever
 filters _agent_ candidates, never a manually/extension/Telegram-added article, so a link you
 deliberately save is never silently blocked by what the agent has learned to avoid. As of "Curated
@@ -1359,7 +1362,7 @@ none of this costs an extra LLM call.
   ranking entirely — validated at load (`validateTopicQuotas` in `curation.ts`): an over-budget sum
   logs a `curation_quota_sum_exceeded` warning and truncates by dropping the **last-listed** quotas
   until it fits (so `{linux:1, hardware:1, security:1}` — sum 3 — comfortably fits within 50% of the
-  default `AGENT_DAILY_PICKS` of 20). A quota topic with fewer matching candidates than requested
+  shipped `AGENT_DAILY_PICKS` of 15). A quota topic with fewer matching candidates than requested
   just takes what exists and logs `rank_quota_unfilled {topic, wanted, got}` — it never blocks the
   run or forces in an off-topic pick.
 - **`prioritySources`** — source ids (from `sources.json`) that each get **at most one** guaranteed
@@ -1495,12 +1498,13 @@ vocabulary over this codebase's own error strings, not a generic parser:
 - **unknown** (anything else) — might pass on retry, might not; gets one lower-confidence attempt
   rather than the full transient/content budget.
 
-An hourly job (part of the existing cron tick, no separate schedule to configure — see `healing.ts`)
-retries transient/content/unknown failures automatically (capped at 2/3/1 attempts respectively and
-never more than 5 retries in a single tick), and classifies any older 'failed' rows that predate
-this feature. A **permanent** failure on an agent-picked article auto-archives itself (the system
-chose it, so burying its own mistake is safe); the same failure on an article you added yourself is
-never auto-archived — it stays in your feed, clearly marked, for you to delete or leave as-is.
+A job on every 30-minute cron tick (part of the existing tick, no separate schedule to configure —
+see `healing.ts`) retries transient/content/unknown failures automatically (capped at 2/3/1 attempts
+respectively and never more than 5 retries in a single tick), and classifies any older 'failed' rows
+that predate this feature. A **permanent** failure on an agent-picked article auto-archives itself
+(the system chose it, so burying its own mistake is safe); the same failure on an article you added
+yourself is never auto-archived — it stays in your feed, clearly marked, for you to delete or leave
+as-is.
 
 **Task 34 change:** a **content** failure that exhausts its heal cap (3 informed retries) and is
 still failed now auto-archives too, but **only for agent-picked articles** — after three attempts,
@@ -1569,12 +1573,17 @@ heavy manual-testing day (the exact scenario that originally exhausted the old 5
 routinely needs more than that on its own. Raising the limit to 80 keeps that headroom generous
 instead — `80 - 10 = 70` slots/day for everything else, more than the old 45, not less. Healing's
 own contribution is self-limiting regardless of the default (see above: capped at 2/1 attempts per
-article and 5 retries per hourly tick, so it only spends slots proportional to an actual failure
+article and 5 retries per 30-minute tick, so it only spends slots proportional to an actual failure
 backlog, not a fixed daily tax).
 
 **Follow-up: `AGENT_DAILY_PICKS` raised again, 10 → 20** — `DAILY_SUMMARY_LIMIT` did not need to
 move this time: `80 - 20 = 60` slots/day headroom for everything else is still more generous than
 the pre-80 baseline of 45, so 80 stays the default.
+
+**Follow-up: agent split into two runs a day, `AGENT_DAILY_PICKS` 20/run → 15/run × 2 runs
+(`AGENT_HOUR_UTC_2`)** — the agent's own daily consumption actually rose, from `20` to `15 × 2 = 30`
+slots on a day both hours fire. `DAILY_SUMMARY_LIMIT` still didn't need to move: `80 - 30 = 50`
+slots/day headroom for everything else remains above the pre-80 baseline of 45.
 
 **Cost at 80/day:** in gateway/direct mode (a real Claude model, e.g. the default
 `claude-haiku-4-5-20251001`), even the theoretical worst case — every one of the 80 slots needing
@@ -1608,9 +1617,13 @@ no required format, just describe what you'd want picked.
 
 ### Schedule and manual trigger
 
-Runs on `AGENT_HOUR_UTC` (default `5`) via the same hourly cron the Telegram drip publish job uses —
-see "Drip publishing (cron)" above for the publish job's own (always-on-every-tick) schedule and how
-to disable the agent. Two ways to run the agent on demand instead of waiting for the clock:
+Runs on `AGENT_HOUR_UTC` (default `5`) and, optionally, a second time on `AGENT_HOUR_UTC_2` (default
+`17`) via the same 30-minute cron the Telegram drip publish job uses — see "Drip publishing (cron)"
+above for the publish job's own (always-on-every-tick) schedule. Each configured hour is
+idempotency-checked independently (see `agent-run-tracker.ts`'s `hasRunAtHourToday`), so the
+twice-an-hour ticks never double-run a slot, but a run at one hour never blocks the other. Clear
+either var to `""` to disable that run; clearing both turns the agent off entirely. Two ways to run
+the agent on demand instead of waiting for the clock:
 
 - `POST /api/admin/agent/run` — Access-protected, returns `202` immediately and runs the job in the
   background.
@@ -1620,11 +1633,12 @@ to disable the agent. Two ways to run the agent on demand instead of waiting for
 Re-running the same day is safe: candidates already saved (matched by URL) are excluded from the
 pool, so nothing gets duplicated.
 
-`GET /api/config` (public) also exposes `agent_hour_utc` (the parsed `AGENT_HOUR_UTC`, or `null` if
-the agent is effectively disabled) and `agent_daily_picks` — this is what powers the SPA's empty
-"Today" state: when today's section has zero articles yet, it shows a live countdown to the next
-agent run (computed client-side from the visitor's own local clock) instead of just disappearing,
-and falls back to a neutral "auto-picks are off" message when the hour is `null`.
+`GET /api/config` (public) also exposes `agent_hour_utc`/`agent_hour_utc_2` (the parsed
+`AGENT_HOUR_UTC`/`AGENT_HOUR_UTC_2`, each `null` if that run is effectively disabled) and
+`agent_daily_picks` — this is what powers the SPA's empty "Today" state: when today's section has
+zero articles yet, it shows a live countdown to whichever configured hour comes next (computed
+client-side from the visitor's own local clock) instead of just disappearing, and falls back to a
+neutral "auto-picks are off" message when both hours are `null`.
 
 **Pending-article UX (agent batch vs. an owner's own add):** a batch of freshly-scraped agent picks
 used to appear as ten individual half-finished cards, each showing the raw English source title and

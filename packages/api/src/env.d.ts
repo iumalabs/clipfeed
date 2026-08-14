@@ -238,7 +238,8 @@ declare global {
     TELEGRAM_OWNER_CHAT_ID?: string;
     // Drip publishing (see telegram-publish.ts, README "Telegram bot"):
     // replaces the old wall-of-text morning digest with one standalone
-    // post per hour. TELEGRAM_CHANNEL_ID (default "") — when set, posts go
+    // post per tick (cron cadence set in wrangler.toml [triggers]).
+    // TELEGRAM_CHANNEL_ID (default "") — when set, posts go
     // there instead of the owner's own chat (bot must be a channel admin);
     // empty means posts land in TELEGRAM_OWNER_CHAT_ID, so the feature
     // works before the owner creates a channel. PUBLISH_START_HOUR_UTC/
@@ -288,9 +289,18 @@ declare global {
     // the job by clearing it to "" — an empty or non-numeric/out-of-range
     // value means it never fires. UTC hour (0-23).
     AGENT_HOUR_UTC: string;
+    // Optional second run of the same scraping agent cron, same UTC-hour
+    // string format/validation as AGENT_HOUR_UTC above — lets Today's feed
+    // refresh twice a day instead of once, so the empty-Today countdown
+    // (TodayEmptyState.tsx) has a shorter worst case. Empty/invalid/unset
+    // means "no second run", same as AGENT_HOUR_UTC's own disabled state;
+    // it's independent of AGENT_HOUR_UTC and may equal it (both hours firing
+    // is idempotency-checked away, see scheduled.ts's per-hour history
+    // check, not a double run).
+    AGENT_HOUR_UTC_2?: string;
     // Retired (Task 29): the old fixed-time morning digest cron is
     // superseded by the drip publish window above (PUBLISH_START_HOUR_UTC/
-    // PUBLISH_END_HOUR_UTC) — one post per hour instead of a once-daily
+    // PUBLISH_END_HOUR_UTC) — one post per tick instead of a once-daily
     // wall of text. No longer read anywhere; kept optional (rather than
     // deleted outright) so an existing fork's wrangler.toml, or a test's
     // env override, that still sets it doesn't need to change. The manual

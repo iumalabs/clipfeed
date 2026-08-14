@@ -29,17 +29,18 @@ import {
 // was chosen against.
 const HEAL_CAPS = { transient: 2, unknown: 1, content: 3 };
 
-// Budget safety: bounds how much queue/LLM work one hourly tick can
+// Budget safety: bounds how much queue/LLM work one cron tick can
 // create, independent of how many failed articles are eligible — a burst
 // of failures (e.g. a provider outage) heals gradually over several ticks
 // instead of all at once.
 const MAX_HEALS_PER_TICK = 5;
 
-// Runs every hour, unconditionally, after the existing scheduled jobs (see
-// scheduled.ts) — no dedicated on/off config, since a self-healing pass is
-// cheap when there's nothing to heal (a couple of empty SELECTs) and the
-// two safety limits above (per-class caps, MAX_HEALS_PER_TICK) already
-// bound its cost when there is.
+// Runs every tick (every 30 minutes, see wrangler.toml [triggers]),
+// unconditionally, after the existing scheduled jobs (see scheduled.ts) —
+// no dedicated on/off config, since a self-healing pass is cheap when
+// there's nothing to heal (a couple of empty SELECTs) and the two safety
+// limits above (per-class caps, MAX_HEALS_PER_TICK) already bound its cost
+// when there is.
 //
 // Three independent passes:
 //  1. Classify any 'failed' rows that predate the fail_class column
