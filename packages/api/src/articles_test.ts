@@ -3,6 +3,7 @@ import { assertEquals, assertNotEquals } from "@std/assert";
 import { app } from "./index.ts";
 import { FakeD1 } from "./testing/fake_d1.ts";
 import { FakeQueue } from "./testing/fake_queue.ts";
+import { matchesHost } from "./testing/url-match.ts";
 
 const TEAM_DOMAIN = "test-team.cloudflareaccess.com";
 const AUD = "test-aud-tag";
@@ -218,8 +219,7 @@ function makeExecutionContext() {
 function stubFetch(opts: { anthropicText?: string; anthropicStatus?: number } = {}): () => void {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = ((input: string | URL | Request) => {
-    const url = input.toString();
-    if (url.startsWith("https://api.anthropic.com")) {
+    if (matchesHost(input, "api.anthropic.com")) {
       return Promise.resolve(
         new Response(
           JSON.stringify({

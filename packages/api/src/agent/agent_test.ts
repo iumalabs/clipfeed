@@ -4,6 +4,7 @@ import { runAgentJob } from "./agent.ts";
 import { readAgentRunHistory } from "./agent-run-tracker.ts";
 import { FakeD1 } from "../testing/fake_d1.ts";
 import { FakeQueue } from "../testing/fake_queue.ts";
+import { matchesHost } from "../testing/url-match.ts";
 import type { SourceConfig } from "./agent-types.ts";
 
 // Meets validateSummary's content bar (>=120 char tldrs, 3-6 bullets each
@@ -107,7 +108,7 @@ function stubFetch(opts: { anthropicStatus?: number } = {}): () => void {
       return Promise.resolve(new Response(rssFixture(feedMatch[1], 2), { status: 200 }));
     }
 
-    if (url.includes("api.anthropic.com")) {
+    if (matchesHost(input, "api.anthropic.com")) {
       if (opts.anthropicStatus && opts.anthropicStatus !== 200) {
         return Promise.resolve(new Response("server error", { status: opts.anthropicStatus }));
       }
@@ -121,7 +122,7 @@ function stubFetch(opts: { anthropicStatus?: number } = {}): () => void {
       return Promise.resolve(anthropicText(JSON.stringify(VALID_SUMMARY)));
     }
 
-    if (url.includes("articles.example.com")) {
+    if (matchesHost(input, "articles.example.com")) {
       return Promise.resolve(
         new Response(ARTICLE_HTML, { status: 200, headers: { "content-type": "text/html" } }),
       );
@@ -323,14 +324,14 @@ Deno.test("runAgentJob: re-running within the same day does not duplicate articl
     if (feedMatch) {
       return Promise.resolve(new Response(rssFixture(feedMatch[1], 1), { status: 200 }));
     }
-    if (url.includes("api.anthropic.com")) {
+    if (matchesHost(input, "api.anthropic.com")) {
       const body = JSON.parse(String(init?.body)) as { system: string };
       if (body.system.includes("rank")) {
         return Promise.resolve(anthropicText("not valid json"));
       }
       return Promise.resolve(anthropicText(JSON.stringify(VALID_SUMMARY)));
     }
-    if (url.includes("articles.example.com")) {
+    if (matchesHost(input, "articles.example.com")) {
       return Promise.resolve(
         new Response(ARTICLE_HTML, { status: 200, headers: { "content-type": "text/html" } }),
       );

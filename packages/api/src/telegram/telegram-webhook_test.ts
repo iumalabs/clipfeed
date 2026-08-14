@@ -7,6 +7,7 @@ import type { TelegramMessage, TelegramUpdate } from "./telegram-client.ts";
 import { resetMissingTelegramSecretsWarningForTest } from "./telegram-webhook.ts";
 import { recordAgentRun } from "../agent/agent-run-tracker.ts";
 import { DEFAULT_PUBLISH_MAX_PER_DAY } from "./telegram-publish.ts";
+import { matchesHost } from "../testing/url-match.ts";
 
 const OWNER_CHAT_ID = "999";
 const OTHER_CHAT_ID = "555";
@@ -150,7 +151,7 @@ function stubFetch(opts: { anthropicStatus?: number } = {}): {
       return Promise.resolve(Response.json({ ok: true, result: true }));
     }
 
-    if (url.startsWith("https://api.anthropic.com")) {
+    if (matchesHost(input, "api.anthropic.com")) {
       return Promise.resolve(
         new Response(
           JSON.stringify({ content: [{ type: "text", text: JSON.stringify(VALID_SUMMARY) }] }),
