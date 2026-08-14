@@ -33,7 +33,7 @@ PENDING_TIMEOUT_MIN = 8
 # Task 65: worst-case per-message pipeline duration (SUMMARIZE_CALL_TIMEOUT_MS
 # x2 + JUDGE_CALL_TIMEOUT_MS x2 + overhead ~= 357s, see PENDING_TIMEOUT_MIN's
 # own comment above) times ceil(AGENT_DAILY_PICKS / max_concurrency) gives the
-# worst-case time for a same-day agent burst to fully drain through the
+# worst-case time for a single agent run's burst to fully drain through the
 # clipfeed-jobs consumer (max_concurrency = 3 below): at the old
 # AGENT_DAILY_PICKS default of 10 that's ceil(10/3) x 357s ~= 24 min, already
 # uncomfortably close to the old 30-minute default here; raising
@@ -41,10 +41,18 @@ PENDING_TIMEOUT_MIN = 8
 # -- past the old timeout, so tail messages in a big burst were being marked
 # 'queue: never picked up' while genuinely still waiting behind backpressure,
 # not actually lost. Doubled to keep pace, landing back at a similar ~40%
-# margin over the recomputed worst case.
+# margin over the recomputed worst case. Now that the agent runs twice a day
+# (AGENT_HOUR_UTC_2) at 15 picks/run instead of once at 20, the per-burst
+# worst case is actually smaller (ceil(15/3) x 357s ~= 30 min) — this value
+# is left unchanged since it already comfortably covers that.
 QUEUE_WAIT_TIMEOUT_MIN = 60
 INTEREST_TOPICS = "AI/LLMs and their engineering; computer hardware — CPUs, GPUs, NVIDIA/Intel/AMD, chips; Linux — kernel, distributions, open source ecosystem; software development and programming languages; Cloudflare and edge computing; security — vulnerabilities, breaches, exploits, threat research; notable science/tech news"
 AGENT_HOUR_UTC = "5"
+# Second daily run of the same agent (see scheduled.ts) — halves the worst-
+# case wait for Today's empty-state countdown by refreshing again in the
+# evening instead of once a day. Same empty/invalid-disables convention as
+# AGENT_HOUR_UTC above.
+AGENT_HOUR_UTC_2 = "17"
 # Curated variety (Task 33, README "Curated variety"): topic quotas,
 # priority sources and the manual blocklist live in committed JSON files
 # (packages/api/curation.json, packages/api/blocklist.json) — no vars
@@ -54,7 +62,8 @@ AGENT_HOUR_UTC = "5"
 AUTOBLOCK_THRESHOLD = "3"
 AUTOBLOCK_TTL_DAYS = "60"
 # Telegram drip publishing (see README "Telegram bot" — replaces the old
-# once-daily digest with one standalone post per hour). TELEGRAM_CHANNEL_ID
+# once-daily digest with one standalone post per tick, every 30 minutes).
+# TELEGRAM_CHANNEL_ID
 # empty means posts go to the owner's own DM (TELEGRAM_OWNER_CHAT_ID)
 # instead of a channel — set it (e.g. "@your_channel" or "-100...") once
 # you've created a channel and added the bot as admin. PUBLISH_START_HOUR_UTC/
@@ -74,14 +83,14 @@ TELEGRAM_CHANNEL_ID = "@clipfeedchannel"
 # only a well-formed https://t.me/ URL renders the banner at all, so an
 # unset or malformed value just hides it everywhere.
 TELEGRAM_CHANNEL_URL = "https://t.me/clipfeedchannel"
-PUBLISH_START_HOUR_UTC = "4"
+PUBLISH_START_HOUR_UTC = "2"
 PUBLISH_END_HOUR_UTC = "18"
 PUBLISH_ENABLED = "true"
-PUBLISH_MAX_PER_DAY = "20"
+PUBLISH_MAX_PER_DAY = "25"
 # How many candidates the agent saves per run. String, parsed defensively
 # (1-20, else this default with a warning) — see README "Daily scraping
 # agent".
-AGENT_DAILY_PICKS = "20"
+AGENT_DAILY_PICKS = "15"
 # How much summary you want to read: the target TOTAL body length in
 # characters (all paragraphs, per language). Prompt and validation both
 # derive their numbers from this one setting (see summarize.ts's
@@ -183,9 +192,11 @@ index_name = "clipfeed-embeddings"
 binding = "IMAGES"
 bucket_name = "clipfeed-images"
 
-# Single hourly cron (see packages/api/src/scheduled/scheduled.ts):
-#   - AGENT_HOUR_UTC (default 5, empty/invalid disables it): the scraping
-#     agent (see README "Daily scraping agent"), runs once at this hour.
+# Cron fires every 30 minutes (see packages/api/src/scheduled/scheduled.ts):
+#   - AGENT_HOUR_UTC / AGENT_HOUR_UTC_2 (defaults 5/17, empty/invalid
+#     disables that slot): the scraping agent (see README "Daily scraping
+#     agent") runs once at each configured hour (idempotency-checked per
+#     hour, so the twice-an-hour ticks don't double-run either slot).
 #   - The Telegram drip publish job (see README "Telegram bot") runs on
 #     EVERY tick, gated by its own PUBLISH_START_HOUR_UTC/
 #     PUBLISH_END_HOUR_UTC window + PUBLISH_ENABLED above rather than a
@@ -193,7 +204,7 @@ bucket_name = "clipfeed-images"
 #     across the whole window, replacing the old once-daily digest cron.
 # Always UTC, unaffected by your own timezone.
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/30 * * * *"]
 
 [assets]
 directory = "./dist/web"

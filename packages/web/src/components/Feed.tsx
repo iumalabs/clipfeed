@@ -55,6 +55,7 @@ export interface FeedProps {
   // explaining why they're seeing meaning-based results for a word search.
   isSemanticFallback: boolean;
   agentHourUtc: number | null;
+  agentHourUtc2: number | null;
   // Task 29 Part C: whether a tag/source filter is active, so the Today
   // countdown and the generic empty state both know the difference between
   // "genuinely nothing yet" and "the filter excludes everything".
@@ -87,6 +88,7 @@ export function Feed(props: FeedProps) {
     searchMode,
     isSemanticFallback,
     agentHourUtc,
+    agentHourUtc2,
     activeTag,
     activeSource,
     onResetFilters,
@@ -243,6 +245,7 @@ export function Feed(props: FeedProps) {
                   <TodayEmptyState
                     dict={dict}
                     agentHourUtc={agentHourUtc}
+                    agentHourUtc2={agentHourUtc2}
                     onReadYesterday={handleReadYesterday}
                   />
                 )}

@@ -35,6 +35,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     PUBLIC_BASE_URL: "",
     INTEREST_TOPICS: "testing",
     AGENT_HOUR_UTC: "5",
+    AGENT_HOUR_UTC_2: "",
     AGENT_DAILY_PICKS: "10",
     SUMMARY_BODY_TARGET_CHARS: "1200",
     // Outside the default publish window (4-18 UTC) and disabled — most
@@ -97,7 +98,7 @@ Deno.test("handleScheduled: on the agent hour, runs the agent job (fetches sourc
   }
 });
 
-Deno.test("handleScheduled: on the agent hour, skips the agent job when a run marker for today already exists (Task 36 Part B)", async () => {
+Deno.test("handleScheduled: on the agent hour, skips the agent job when a run marker for THIS hour already exists (per-hour idempotency)", async () => {
   let fetchCalled = false;
   const restore = stubFetch(() => {
     fetchCalled = true;
@@ -106,13 +107,83 @@ Deno.test("handleScheduled: on the agent hour, skips the agent job when a run ma
   try {
     const env = makeEnv({ AGENT_HOUR_UTC: "5" });
     const scheduledTime = new Date("2026-01-01T05:00:00Z").getTime();
-    // A manual run already happened earlier today (e.g. /scrape before the
-    // scheduled hour) — the scheduled dispatch must not double it.
+    // A manual run already happened earlier this same hour (e.g. /scrape
+    // right after :00, before the :30 tick) — the scheduled dispatch must
+    // not double it.
+    await recordAgentRun(
+      env.CACHE,
+      { startedAt: "2026-01-01T05:10:00.000Z", picks: 8, trigger: "manual" },
+      new Date(scheduledTime),
+    );
+    await handleScheduled(env, scheduledTime);
+    assertEquals(fetchCalled, false);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("handleScheduled: a run recorded at a DIFFERENT hour today does not block this hour's dispatch", async () => {
+  let fetchCalled = false;
+  const restore = stubFetch(() => {
+    fetchCalled = true;
+    return new Response("nope", { status: 500 });
+  });
+  try {
+    const env = makeEnv({ AGENT_HOUR_UTC: "5" });
+    const scheduledTime = new Date("2026-01-01T05:00:00Z").getTime();
+    // A manual run already happened earlier today, but at a different hour
+    // — this is what makes two configured hours (AGENT_HOUR_UTC/
+    // AGENT_HOUR_UTC_2) independently useful instead of the old
+    // any-run-today-blocks behavior.
     await recordAgentRun(
       env.CACHE,
       { startedAt: "2026-01-01T02:00:00.000Z", picks: 8, trigger: "manual" },
       new Date(scheduledTime),
     );
+    await handleScheduled(env, scheduledTime);
+    assertEquals(fetchCalled, true);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("handleScheduled: fires on AGENT_HOUR_UTC_2 too, independently idempotent from AGENT_HOUR_UTC", async () => {
+  let fetchCalled = false;
+  const restore = stubFetch(() => {
+    fetchCalled = true;
+    return new Response("nope", { status: 500 });
+  });
+  try {
+    const env = makeEnv({ AGENT_HOUR_UTC: "5", AGENT_HOUR_UTC_2: "17" });
+    // Already ran at the FIRST configured hour today — must not block the
+    // second.
+    await recordAgentRun(
+      env.CACHE,
+      { startedAt: "2026-01-01T05:00:00.000Z", picks: 8, trigger: "scheduled" },
+      new Date("2026-01-01T17:00:00Z"),
+    );
+    const scheduledTime = new Date("2026-01-01T17:00:00Z").getTime();
+    await handleScheduled(env, scheduledTime);
+    assertEquals(fetchCalled, true);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("handleScheduled: the second half-hour tick within an already-run agent hour does not double-run it", async () => {
+  let fetchCalled = false;
+  const restore = stubFetch(() => {
+    fetchCalled = true;
+    return new Response("nope", { status: 500 });
+  });
+  try {
+    const env = makeEnv({ AGENT_HOUR_UTC: "5", AGENT_HOUR_UTC_2: "17" });
+    await recordAgentRun(
+      env.CACHE,
+      { startedAt: "2026-01-01T17:00:00.000Z", picks: 8, trigger: "scheduled" },
+      new Date("2026-01-01T17:30:00Z"),
+    );
+    const scheduledTime = new Date("2026-01-01T17:30:00Z").getTime();
     await handleScheduled(env, scheduledTime);
     assertEquals(fetchCalled, false);
   } finally {

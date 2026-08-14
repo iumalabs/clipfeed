@@ -250,6 +250,7 @@ export function App() {
     readStoredSectionState(localStorage)
   );
   const [agentHourUtc, setAgentHourUtc] = useState<number | null>(null);
+  const [agentHourUtc2, setAgentHourUtc2] = useState<number | null>(null);
   // Task 30 Part D: null hides both the header's GitHub icon and the
   // footer's license link (see repoConfig.ts, Header.tsx, Footer.tsx).
   const [repoUrl, setRepoUrl] = useState<string | null>(null);
@@ -314,7 +315,10 @@ export function App() {
   // — fetched once and cached (see loadAgentSchedule), same as the
   // Turnstile site key fetch elsewhere.
   useEffect(() => {
-    loadAgentSchedule().then((config) => setAgentHourUtc(config.agentHourUtc));
+    loadAgentSchedule().then((config) => {
+      setAgentHourUtc(config.agentHourUtc);
+      setAgentHourUtc2(config.agentHourUtc2);
+    });
   }, []);
 
   // Powers the header's GitHub icon link and the footer's license link
@@ -1099,6 +1103,7 @@ export function App() {
                 searchMode={searchMode}
                 isSemanticFallback={isShowingSemanticFallback(searchMode, query, fallbackQuery)}
                 agentHourUtc={agentHourUtc}
+                agentHourUtc2={agentHourUtc2}
                 activeTag={activeTag}
                 activeSource={activeSource}
                 onResetFilters={handleClearAll}

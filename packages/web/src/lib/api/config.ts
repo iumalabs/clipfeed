@@ -8,6 +8,7 @@
 // hitting the network themselves.
 export interface RawConfig {
   agent_hour_utc?: number | null;
+  agent_hour_utc_2?: number | null;
   agent_daily_picks?: number;
   repo_url?: string;
   telegram_channel_url?: string;

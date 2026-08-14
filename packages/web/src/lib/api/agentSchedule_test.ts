@@ -5,25 +5,25 @@ import { formatCountdown, nextAgentRunMs } from "./agentSchedule.ts";
 
 Deno.test("nextAgentRunMs - upcoming hour today is used as-is", () => {
   const now = new Date("2026-07-21T05:00:00.000Z");
-  const next = nextAgentRunMs(9, now);
+  const next = nextAgentRunMs([9], now);
   assertEquals(new Date(next).toISOString(), "2026-07-21T09:00:00.000Z");
 });
 
 Deno.test("nextAgentRunMs - hour already passed today rolls over to tomorrow", () => {
   const now = new Date("2026-07-21T10:00:00.000Z");
-  const next = nextAgentRunMs(9, now);
+  const next = nextAgentRunMs([9], now);
   assertEquals(new Date(next).toISOString(), "2026-07-22T09:00:00.000Z");
 });
 
 Deno.test("nextAgentRunMs - exactly at the hour rolls over (already ran this instant)", () => {
   const now = new Date("2026-07-21T09:00:00.000Z");
-  const next = nextAgentRunMs(9, now);
+  const next = nextAgentRunMs([9], now);
   assertEquals(new Date(next).toISOString(), "2026-07-22T09:00:00.000Z");
 });
 
 Deno.test("nextAgentRunMs - works across a UTC month/year boundary", () => {
   const now = new Date("2025-12-31T23:30:00.000Z");
-  const next = nextAgentRunMs(5, now);
+  const next = nextAgentRunMs([5], now);
   assertEquals(new Date(next).toISOString(), "2026-01-01T05:00:00.000Z");
 });
 
@@ -31,8 +31,26 @@ Deno.test("nextAgentRunMs - is DST-safe: pure epoch arithmetic, unaffected by lo
   // Regardless of what local timezone the test runner is in, the UTC-hour
   // target must always resolve to the same absolute instant.
   const now = new Date("2026-03-08T12:00:00.000Z"); // a US DST-transition date
-  const next = nextAgentRunMs(5, now);
+  const next = nextAgentRunMs([5], now);
   assertEquals(new Date(next).toISOString(), "2026-03-09T05:00:00.000Z");
+});
+
+Deno.test("nextAgentRunMs - two configured hours: picks whichever comes first when both are still ahead today", () => {
+  const now = new Date("2026-07-21T03:00:00.000Z");
+  const next = nextAgentRunMs([17, 5], now);
+  assertEquals(new Date(next).toISOString(), "2026-07-21T05:00:00.000Z");
+});
+
+Deno.test("nextAgentRunMs - two configured hours: today's earlier hour already passed, falls back to today's later hour", () => {
+  const now = new Date("2026-07-21T10:00:00.000Z");
+  const next = nextAgentRunMs([5, 17], now);
+  assertEquals(new Date(next).toISOString(), "2026-07-21T17:00:00.000Z");
+});
+
+Deno.test("nextAgentRunMs - two configured hours: both already passed today, rolls over to tomorrow's earlier hour", () => {
+  const now = new Date("2026-07-21T20:00:00.000Z");
+  const next = nextAgentRunMs([5, 17], now);
+  assertEquals(new Date(next).toISOString(), "2026-07-22T05:00:00.000Z");
 });
 
 // --- formatCountdown ---

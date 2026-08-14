@@ -493,6 +493,7 @@
         "required": [
           "turnstile_site_key",
           "agent_hour_utc",
+          "agent_hour_utc_2",
           "agent_daily_picks",
           "repo_url",
           "telegram_channel_url"
@@ -505,6 +506,10 @@
           "agent_hour_utc": {
             "type": ["integer", "null"],
             "description": "UTC hour (0-23) the daily scraping agent runs; null when disabled."
+          },
+          "agent_hour_utc_2": {
+            "type": ["integer", "null"],
+            "description": "UTC hour (0-23) of the agent's optional second daily run (AGENT_HOUR_UTC_2); null when this fork hasn't configured a second run."
           },
           "agent_daily_picks": { "type": "integer" },
           "repo_url": {

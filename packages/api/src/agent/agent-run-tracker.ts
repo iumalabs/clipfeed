@@ -67,6 +67,23 @@ export async function hasRunToday(cache: KVNamespace, now: Date = new Date()): P
   return (await readAgentRunHistory(cache, now)).length > 0;
 }
 
+// Per-hour idempotency for the two-runs-a-day schedule
+// (AGENT_HOUR_UTC/AGENT_HOUR_UTC_2) — a run already recorded at a given UTC
+// hour blocks a redundant scheduled dispatch at that SAME hour (the
+// twice-an-hour cron ticks racing each other), but must NOT block the
+// day's other configured hour, unlike the old hasRunToday "any run today"
+// check this replaces for the scheduled dispatcher. Hour is derived from
+// each record's startedAt rather than stored separately, since startedAt
+// already carries it.
+export async function hasRunAtHourToday(
+  cache: KVNamespace,
+  hourUtc: number,
+  now: Date = new Date(),
+): Promise<boolean> {
+  const previousRuns = await readAgentRunHistory(cache, now);
+  return previousRuns.some((run) => new Date(run.startedAt).getUTCHours() === hourUtc);
+}
+
 // Appends one completed run to today's history (capped at MAX_HISTORY,
 // oldest dropped first) and writes it back with a fresh 48h TTL — called
 // once, at the end of a successful runAgentJob (see agent.ts), never before
