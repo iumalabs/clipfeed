@@ -80,7 +80,9 @@ function buildRankSystemPrompt(
     `(a) at most ${MAX_PICKS_PER_SOURCE} items per source; ` +
     `(b) cover at least ${MIN_TOPIC_DIVERSITY} distinct topic areas from the interest list when the pool allows; ` +
     `(c) prefer substantive reporting over link-posts and speculation; ` +
-    `(d) never rank two items covering the same story/event highly — pick the most substantive one and omit the rest. ` +
+    `(d) never rank two items covering the same story/event highly — pick the most substantive one and omit the rest; ` +
+    `(e) exclude shopping buying-guides, "best X" / "top N" product roundups, and multi-product ` +
+    `price-comparison listicles — these are not news even when framed as reviews. ` +
     `Respond ONLY with a JSON array of up to ${maxItems} objects, best-first, each shaped ` +
     `{"i": "<candidate id>", "topic": "<one of: ${vocab.join(", ")}>"}.`;
 }

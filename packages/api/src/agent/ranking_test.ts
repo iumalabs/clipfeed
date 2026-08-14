@@ -614,6 +614,10 @@ Deno.test("rankCandidates: the rendered system prompt states the pick count, har
       capturedSystem.includes("never rank two items covering the same story/event"),
       true,
     );
+    assertEquals(
+      capturedSystem.includes("exclude shopping buying-guides"),
+      true,
+    );
     assertEquals(capturedSystem.includes('"i": "<candidate id>"'), true);
     assertEquals(capturedSystem.includes("ai, hardware, linux, security"), true);
   } finally {

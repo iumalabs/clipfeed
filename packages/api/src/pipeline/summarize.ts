@@ -477,7 +477,10 @@ different languages or forms. If the source is primarily a sponsored product dea
 or affiliate promotion rather than reporting (a discount percentage, a "was $X now $Y" price, a
 "buy now" call to action, or an affiliate-commission disclosure), include "deals" among the tags —
 this is a secondary signal, not a replacement for writing an accurate, faithful summary of the deal
-itself.
+itself. The same "deals" tag also applies when the source is a shopping buying-guide or "best X"
+product roundup rather than reporting — several products compared side by side with prices, plus a
+top-pick verdict ("best overall", "top pick", "лучший выбор") — as opposed to an ordinary
+single-product review or news piece that merely mentions a price in passing.
 
 lang_original: ISO 639-1 code of the source article's language.
 

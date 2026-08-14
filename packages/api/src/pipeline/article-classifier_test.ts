@@ -151,3 +151,41 @@ Deno.test("classifyArticleContent: an affiliate disclosure alone (1 category) do
   });
   assertEquals(result.isNonArticle, false);
 });
+
+// --- buying-guide filter ---
+
+Deno.test("classifyArticleContent: a multi-product buying-guide roundup is flagged as buying_guide", () => {
+  const result = classifyArticleContent({
+    title: "The best robot lawn mowers of 2026",
+    textContent:
+      "We tested five robot lawn mowers on our own three-quarter-acre yard: the Husqvarna 420 IQ " +
+      "($3,299), the Mammotion Luba 3 AWD 3000 ($2,799), the Segway Navimow X430 ($2,499), the " +
+      "Dreame A3 AWD Pro 2500 ($3,099.99), and the Roborock RockNeo Q110H ($1,299). Our top pick " +
+      "is the Navimow X430 — it never got stuck and mowed the whole lawn unattended. Check price " +
+      "at Amazon.",
+  });
+  assertEquals(result.isNonArticle, true);
+  assertEquals(result.filterKey, "buying_guide");
+  assertEquals(result.reason?.includes("multi_product_pricing"), true);
+});
+
+Deno.test("classifyArticleContent: a single-product hardware review (e.g. a GPU review) is NOT flagged", () => {
+  // The exact false-positive risk this filter must avoid: ordinary tech
+  // journalism about one product, which INTEREST_TOPICS explicitly wants.
+  const result = classifyArticleContent({
+    title: "NVIDIA RTX 5090 review: is it worth the upgrade?",
+    textContent: "The RTX 5090 launches at $1,999 and brings a substantial generational leap in " +
+      "ray-tracing performance. In our benchmarks it outpaced the previous flagship by roughly " +
+      "35% across modern titles, though power draw climbed accordingly. For enthusiasts chasing " +
+      "4K/120fps with ray tracing enabled, it's a compelling — if expensive — upgrade.",
+  });
+  assertEquals(result.isNonArticle, false);
+});
+
+Deno.test("classifyArticleContent: a 'Best X 2026' title alone (1 signal) does not trip the buying-guide guard", () => {
+  const result = classifyArticleContent({
+    title: "Best laptops of 2026",
+    textContent: "A short editorial intro with no other buying-guide signals present at all.",
+  });
+  assertEquals(result.isNonArticle, false);
+});

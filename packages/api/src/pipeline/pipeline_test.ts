@@ -722,6 +722,90 @@ Deno.test("runArticlePipeline: a real article that merely mentions a couple of t
   assertEquals(db.rows.get("p-real")?.status, "ready");
 });
 
+// --- runArticlePipeline / runResummarization: post-summary buying-guide
+// gate (layer 3 — see buying-guide-signals.ts's doc comment for the full
+// three-layer picture). Same validateSummary content bar as VALID_SUMMARY
+// (reuses its body_ru/bullets_ru verbatim — only title_ru/tldr_ru/tags
+// change, since the buying-guide signals live there), but a title/TL;DR
+// shaped like a multi-product roundup with several prices and "лучший
+// выбор" ranking language. ---
+
+const BUYING_GUIDE_SUMMARY = {
+  title_ru: "Лучшие робот-газонокосилки 2026 года",
+  tldr_ru:
+    "Мы протестировали пять робот-газонокосилок и выбираем лучший выбор для автоматического ухода за газоном: Husqvarna 420 IQ за $3299, Mammotion Luba 3 за $2799, Segway Navimow X430 за $2499, Dreame A3 Pro за $3099 и Roborock RockNeo за $1299.",
+  body_ru: VALID_SUMMARY.body_ru,
+  bullets_ru: VALID_SUMMARY.bullets_ru,
+  tags: ["hardware"],
+  lang_original: "en",
+};
+
+function buyingGuideSummaryResponse(): Response {
+  return new Response(
+    JSON.stringify({ content: [{ type: "text", text: JSON.stringify(BUYING_GUIDE_SUMMARY) }] }),
+    { status: 200 },
+  );
+}
+
+Deno.test("runArticlePipeline: a summary that reads as a buying-guide roundup is marked failed, never published (layer 3)", async () => {
+  const db = new ControllableD1();
+  const cache = new FakeKV();
+  const env = makePipelineEnv({
+    DB: db as unknown as D1Database,
+    CACHE: cache as unknown as KVNamespace,
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (() => Promise.resolve(buyingGuideSummaryResponse())) as typeof fetch;
+  try {
+    await runArticlePipeline(env, {
+      id: "p-buying-guide",
+      url: "https://example.com/best-robot-mowers",
+      html: ARTICLE_HTML,
+      requestTags: [],
+      addedVia: "agent",
+      alreadyEnforced: false,
+      source: null,
+      addedAt: "2026-01-01T00:00:00.000Z",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const row = db.rows.get("p-buying-guide");
+  assertEquals(row?.status, "failed");
+  assert((row?.error as string).startsWith("summarize: not a news article ("));
+  // Same not_news classification/auto-block scoring as the pre-LLM guard
+  // (see "the non-article guard also records an auto-block signal" above).
+  assertEquals(await cache.get("autostat:example.com"), "1");
+});
+
+Deno.test("runResummarization: a summary that reads as a buying-guide roundup is marked failed (layer 3)", async () => {
+  const db = new ControllableD1();
+  const env = makePipelineEnv({ DB: db as unknown as D1Database });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (() => Promise.resolve(buyingGuideSummaryResponse())) as typeof fetch;
+  try {
+    await runResummarization(env, {
+      id: "p-resummarize-buying-guide",
+      title: "Best robot lawn mowers of 2026",
+      author: null,
+      fullText:
+        "Full extracted article text, long enough to clear the minimum length guard used elsewhere in these tests.",
+      requestTags: [],
+      addedVia: "manual",
+      alreadyEnforced: false,
+      source: null,
+      addedAt: "2026-01-01T00:00:00.000Z",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const row = db.rows.get("p-resummarize-buying-guide");
+  assertEquals(row?.status, "failed");
+  assert((row?.error as string).startsWith("summarize: not a news article ("));
+});
+
 // Task 58: MIN_EXTRACTED_CHARS is a configurable [vars] override (parsed by
 // summarize.ts's parseMinExtractedChars), not a hardcoded constant — this
 // article's extracted text is comfortably above the 300 default but below

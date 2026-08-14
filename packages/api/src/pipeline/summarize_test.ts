@@ -1688,6 +1688,13 @@ Deno.test("buildSystemPrompt: RU-only — no _en fields mentioned anywhere in th
   );
 });
 
+Deno.test("buildSystemPrompt: the deals-tag instruction also covers buying-guide/roundup content, not just discounts", () => {
+  const prompt = buildSystemPrompt(DEFAULT_STRICT_SPEC);
+  assertEquals(prompt.includes('include "deals" among the tags'), true);
+  assertEquals(prompt.includes("shopping buying-guide"), true);
+  assertEquals(prompt.includes("several products compared side by side with prices"), true);
+});
+
 Deno.test("buildSystemPrompt: STRICT prompt at the default target states the spec's own numbers", () => {
   const prompt = buildSystemPrompt(DEFAULT_STRICT_SPEC);
   assertEquals(prompt.includes("at least 150 characters"), true);

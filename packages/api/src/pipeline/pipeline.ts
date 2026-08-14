@@ -3,6 +3,7 @@ import type { FaithfulnessJson, FaithfulnessVerdict, SummaryJson } from "@clipfe
 import { safeFetchText } from "./ssrf.ts";
 import { extractArticle } from "./extract.ts";
 import { classifyArticleContent } from "./article-classifier.ts";
+import { type BuyingGuideSignals, detectBuyingGuideSignals } from "./buying-guide-signals.ts";
 import {
   deriveSummarySpec,
   generateEnglishFields,
@@ -238,6 +239,23 @@ interface FaithfulnessStageOutcome {
   // resummarize/heal cycle never restarts the cycle (see
   // db.ts's markFaithfulnessEnforced / PipelineSuccessUpdate).
   enforcementSpent: boolean;
+}
+
+// Third layer of the buying-guide/product-roundup filter (see
+// buying-guide-signals.ts's own doc comment for the full picture — layer 1
+// is ranking.ts's prompt hard-rule, layer 2 is article-classifier.ts's
+// pre-LLM check on the raw page). This one runs AFTER summarization, as a
+// safety net for whatever the raw-page check didn't catch — e.g. a source
+// whose own ranking language only became explicit once the model
+// paraphrased it into "лучший выбор"/"top pick" phrasing. Checked against
+// the RU summary (title_ru + tldr_ru + body_ru + bullets_ru), since that's
+// what a reader actually sees. Deliberately NOT folded into
+// validateSummary()'s violations/corrective-retry loop below — asking the
+// model to regenerate wouldn't change the underlying article's nature, so a
+// hit here goes straight to a terminal 'failed', same as layer 2.
+function checkBuyingGuidePostSummary(summary: SummaryJson): BuyingGuideSignals {
+  const text = [summary.tldr_ru, ...summary.body_ru, ...summary.bullets_ru].join("\n");
+  return detectBuyingGuideSignals(summary.title_ru, text);
 }
 
 // Runs AFTER a summary validates and BEFORE the article is marked 'ready' —
@@ -591,6 +609,21 @@ export async function runArticlePipeline(env: Env, input: PipelineInput): Promis
       informed_retry: Boolean(input.priorViolations),
     });
 
+    const buyingGuide = checkBuyingGuidePostSummary(summary);
+    if (buyingGuide.isBuyingGuide) {
+      const notNewsReason = `summarize: not a news article (buying_guide signals: ${
+        buyingGuide.matchedSignals.join(", ")
+      })`;
+      await markArticleFailed(env.DB, input.id, notNewsReason);
+      await recordAutoBlockAgentSignal(env, input.url, notNewsReason);
+      console.log(JSON.stringify({
+        event: "buying_guide_archived",
+        id: input.id,
+        matchedSignals: buyingGuide.matchedSignals,
+      }));
+      return;
+    }
+
     stage = "faithfulness";
     const faithfulness = await runFaithfulnessStage(
       env,
@@ -734,6 +767,20 @@ export async function runResummarization(env: Env, input: ResummarizeInput): Pro
       text_chars: text.length,
       informed_retry: Boolean(input.priorViolations),
     });
+
+    const buyingGuide = checkBuyingGuidePostSummary(summary);
+    if (buyingGuide.isBuyingGuide) {
+      const notNewsReason = `summarize: not a news article (buying_guide signals: ${
+        buyingGuide.matchedSignals.join(", ")
+      })`;
+      await markArticleFailed(env.DB, input.id, notNewsReason);
+      console.log(JSON.stringify({
+        event: "buying_guide_archived",
+        id: input.id,
+        matchedSignals: buyingGuide.matchedSignals,
+      }));
+      return;
+    }
 
     stage = "faithfulness";
     const faithfulness = await runFaithfulnessStage(

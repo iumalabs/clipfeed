@@ -1212,6 +1212,35 @@ summarization prompt itself (`summarize.ts`'s `buildSystemPrompt`) also asks the
 deal/promo content it does end up summarizing with a `deals` tag, so the owner can still filter it
 out via the SPA's existing tag filter sidebar even on a false negative.
 
+**Buying-guide / product-roundup filter.** A three-layer defense against shopping content that reads
+as editorial ("Best robot lawn mowers of 2026", a multi-product comparison with a price table and a
+"top pick") but isn't news — deliberately conservative, since ordinary single-product tech reviews
+(a GPU review, a phone review) are exactly the kind of content `INTEREST_TOPICS` wants and must not
+be caught by this. All three layers share the same signal set (`pipeline/buying-guide-signals.ts`):
+≥3 price-shaped tokens (a proxy for "several products compared", not one product's own price),
+ranking language ("best overall", "top pick", "лучший выбор"), a "Best X 2026"/"Top N"/"buying
+guide"-shaped title, and a buy-now/check-price call to action — requiring **3 of these 4** signals
+together before anything is blocked, so a single-product review mentioning one price and using
+"best" loosely never trips it.
+
+1. **Ranking prompt** (`ranking.ts`'s `buildRankSystemPrompt`) — a soft hard-rule asking the model
+   to exclude buying-guide/roundup candidates from the ranked list in the first place, based only on
+   title/snippet (no full text yet at this stage) — the cheapest layer, saves a fetch/extract/
+   summarize cycle on the obvious cases.
+2. **Pre-LLM, on the extracted page** (`article-classifier.ts`'s `classifyArticleContent`) — the
+   authoritative deterministic gate, checked against the full extracted title+text right alongside
+   the boilerplate/advertisement filters above. A hit fails the same way they do:
+   `'extraction: not a news article (buying_guide signals: ...)'`, `permanent`/`not_news`.
+3. **Post-summary, on the finished summary** (`pipeline.ts`, right after `runSummarizationForMode`,
+   in both `runArticlePipeline` and `runResummarization`) — a safety net for whatever layer 2 missed
+   on the raw page (e.g. ranking language that only became explicit once the model paraphrased it
+   into `"лучший выбор"`), checked against `title_ru`/`tldr_ru`/`body_ru`/`bullets_ru`. Deliberately
+   **not** folded into `validateSummary()`'s corrective-retry loop — regenerating the summary again
+   wouldn't change the underlying article's nature, so a hit here goes straight to
+   `'summarize: not a news article (buying_guide signals: ...)'` (its own `classify-failure.ts`
+   permanent rule, same `not_news` key — no new SPA localization needed) instead of spending another
+   LLM call on a retry that can't succeed.
+
 **Descriptive fetch-blocked errors (`blocked`).** Some sites reject a plain server-side fetch
 outright with HTTP 400 and a generic client-rendered "Error" page — verified against
 `developer.meta.com`'s AI landing pages, which return this even to a real browser User-Agent; the
