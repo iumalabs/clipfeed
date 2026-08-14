@@ -2,6 +2,7 @@ import "../env.d.ts";
 import { assertEquals } from "@std/assert";
 import { fetchAllCandidates, SOURCES } from "./sources.ts";
 import type { SourceConfig } from "./agent-types.ts";
+import { matchesHost } from "../testing/url-match.ts";
 
 const RSS_FIXTURE = `<rss><channel>
   <item><title>A</title><link>https://a.example.com/1</link><pubDate>Mon, 01 Jan 2026 00:00:00 GMT</pubDate></item>
@@ -76,7 +77,7 @@ Deno.test("fetchAllCandidates: aggregates candidates across rss + hackernews sou
 
 Deno.test("fetchAllCandidates: one source failing is logged and skipped, others still succeed", async () => {
   const restore = stubFetch((url) => {
-    if (url.includes("broken.example.com")) {
+    if (matchesHost(url, "broken.example.com")) {
       return new Response("server error", { status: 500 });
     }
     return new Response(RSS_FIXTURE, { status: 200 });

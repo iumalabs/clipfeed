@@ -5,6 +5,7 @@ import { FakeD1 } from "./testing/fake_d1.ts";
 import { insertPendingArticle, markArticleFailed } from "./articles/db.ts";
 import { FakeQueue } from "./testing/fake_queue.ts";
 import { recordAgentRun } from "./agent/agent-run-tracker.ts";
+import { matchesHost } from "./testing/url-match.ts";
 
 const TEAM_DOMAIN = "test-team.cloudflareaccess.com";
 const AUD = "test-aud-tag";
@@ -180,8 +181,7 @@ function makeExecutionContext() {
 function stubFetch(opts: { anthropicStatus?: number } = {}): () => void {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = ((input: string | URL | Request) => {
-    const url = input.toString();
-    if (url.startsWith("https://api.anthropic.com")) {
+    if (matchesHost(input, "api.anthropic.com")) {
       return Promise.resolve(
         new Response(
           JSON.stringify({ content: [{ type: "text", text: JSON.stringify(VALID_SUMMARY) }] }),
