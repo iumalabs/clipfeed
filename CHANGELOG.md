@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.1](https://github.com/iumalabs/clipfeed/compare/v1.2.0...v1.2.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* resolve open CodeQL security-scanning alerts ([b169fe3](https://github.com/iumalabs/clipfeed/commit/b169fe3c41b9f776746f655ec98569f1edd23ba6))
+* resolve open CodeQL security-scanning alerts ([9f6a3b6](https://github.com/iumalabs/clipfeed/commit/9f6a3b68a89850a785dd964f8e63056d5089b846))
+
 ## [1.2.0](https://github.com/iumalabs/clipfeed/compare/v1.1.0...v1.2.0) (2026-08-14)
 
 
