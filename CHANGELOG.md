@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.0](https://github.com/iumalabs/clipfeed/compare/v1.1.0...v1.2.0) (2026-08-14)
+
+
+### Features
+
+* drip Telegram every 30min and run the scraping agent twice a day ([891c070](https://github.com/iumalabs/clipfeed/commit/891c07068dbb77d3eb95311fd29ca33f5c5695a1))
+* drip Telegram every 30min and run the scraping agent twice a day ([660f8ef](https://github.com/iumalabs/clipfeed/commit/660f8ef5a1dacb376076881091ffe25bcdd6be5c))
+* filter shopping buying-guide/product-roundup articles ([f5e9e92](https://github.com/iumalabs/clipfeed/commit/f5e9e9201cf40b47236263440671722b56fc67ce))
+* filter shopping buying-guide/product-roundup articles ([e7c907f](https://github.com/iumalabs/clipfeed/commit/e7c907ff2d3f83c0acd0745b6fb7667e7e751253))
+
 ## [1.1.0](https://github.com/iumalabs/clipfeed/compare/v1.0.0...v1.1.0) (2026-08-12)
 
 
