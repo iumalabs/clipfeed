@@ -17,7 +17,13 @@ jobs:
   # the Chrome extension (see e2e/tests/, none of it references extension
   # code; that surface has its own release-extension.yml flow).
   changes:
-    runs-on: ubuntu-latest
+    # Fork-safe runs-on: ci.yml's `pull_request` trigger is unrestricted (this
+    # is a public repo), so a fork PR's own code must never land on a
+    # self-hosted runner — falls back to ubuntu-latest specifically for
+    # fork-originated PRs, self-hosted otherwise. See
+    # maksimyugai/github-runners's deploy/RUNBOOK.md, "Fork-safe runs-on for
+    # public repos with an unrestricted pull_request trigger".
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted", "general"]') }}
     outputs:
       e2e: ${{ steps.filter.outputs.e2e }}
     steps:
@@ -42,7 +48,8 @@ jobs:
               - 'deno.lock'
 
   check:
-    runs-on: ubuntu-latest
+    # Fork-safe runs-on — see the `changes` job above for the rationale/link.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted", "general"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,7 +94,9 @@ jobs:
         run: deno task build
 
   gitleaks:
-    runs-on: ubuntu-latest
+    # Fork-safe runs-on, docker tier (needs the host Docker socket) — see the
+    # `changes` job above for the rationale/link.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted", "docker"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -130,7 +139,8 @@ jobs:
   e2e:
     needs: changes
     if: needs.changes.outputs.e2e == 'true'
-    runs-on: ubuntu-latest
+    # Fork-safe runs-on — see the `changes` job above for the rationale/link.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted", "general"]') }}
     continue-on-error: true
     permissions:
       contents: read
