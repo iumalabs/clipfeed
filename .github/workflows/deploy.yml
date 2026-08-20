@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, general]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
 
   deploy:
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, deploy]
     # A fork's repo has no Cloudflare secrets configured — every step below
     # is individually gated on this so the job finishes green (steps show as
     # skipped) instead of red. Job-level `if:` can't read this same job's own
