@@ -12,7 +12,7 @@ jobs:
     runs-on: [self-hosted, general]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2
@@ -50,7 +50,7 @@ jobs:
 
       - name: Checkout
         if: env.HAS_DEPLOY_SECRETS == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Deno
         if: env.HAS_DEPLOY_SECRETS == 'true'
